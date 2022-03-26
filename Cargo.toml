@@ -6,3 +6,23 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+# simple error handling
+anyhow = "1.0.56"
+# store static data
+lazy_static = "1.4"
+# logging
+log = "0.4.16"
+# rust replacement for GLM (graphics math library)
+nalgebra-glm = "0.16"
+# load PNGs as texture
+png = "0.17.5"
+# print logs to console
+pretty_env_logger = "0.4"
+# custom error types without boilerplate
+thiserror = "1.0.30"
+# load 3D models in wavefront format
+tobj = "3.2.1"
+# Vulkan API
+vulkanalia = { version = "=0.14.0", features = ["libloading", "window"] }
+# create window to render to
+winit = "0.26.1"
