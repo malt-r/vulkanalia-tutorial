@@ -6,6 +6,7 @@ use winit::window::{Window, WindowBuilder};
 
 
 fn main() -> anyhow::Result<()> {
+    dotenv::dotenv().ok();
     pretty_env_logger::init();
 
     // Create window
@@ -32,6 +33,7 @@ fn main() -> anyhow::Result<()> {
             Event::WindowEvent { event: WindowEvent::CloseRequested, ..} => {
                 destroying = true;
                 *control_flow = ControlFlow::Exit;
+                log::info!("Hello");
                 unsafe { app.destroy(); }
             }
             _ => {}
