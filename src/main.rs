@@ -1,3 +1,5 @@
+#[allow(dead_code, unused_variables, unused_imports)]
+
 use anyhow::{anyhow, Result};
 
 // winit related imports (window abstraction)
@@ -24,6 +26,42 @@ const VALIDATION_ENABLED: bool = cfg!(debug_assertions);
 
 const VALIDATION_LAYER: vk::ExtensionName =
     vk::ExtensionName::from_bytes(b"VK_LAYER_KHRONOS_validation");
+
+/// register a callback function, which will be called from the vulkan library,
+/// if a validation layer message is sent
+///
+/// the "system" part of the declaration will select whatever calling convention
+/// is the right one for interacting with the libraries of the current target
+///
+/// this function signature needs to match the following function:
+/// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/PFN_vkDebugUtilsMessengerCallbackEXT.html
+extern "system" fn debug_callback(
+    severity: vk::DebugUtilsMessageSeverityFlagsEXT,
+    // can be "general", "validation" or "performance"
+    type_: vk::DebugUtilsMessageTypeFlagsEXT,
+    data: *const vk::DebugUtilsMessengerCallbackDataEXT,
+    // will be specified during setup, allows the user to pass in their own data
+    _: *mut c_void,
+) -> vk::Bool32 {
+    // TODO: is there a way to add a nullptr check here?
+    let data = unsafe { *data };
+    let message = unsafe { CStr::from_ptr(data.message) }.to_string_lossy();
+
+    // convert severity to according logging mode
+    if severity >= vk::DebugUtilsMessageSeverityFlagsEXT::ERROR {
+        error!("({:?}) {}", type_, message);
+    } else if severity >= vk::DebugUtilsMessageSeverityFlagsEXT::WARNING {
+        warn!("({:?}) {}", type_, message);
+    } else if severity >= vk::DebugUtilsMessageSeverityFlagsEXT::INFO {
+        debug!("({:?}) {}", type_, message);
+    } else {
+        trace!("({:?}) {}", type_, message);
+    }
+
+    // the return value of this function is interpreted as an indication, if
+    // the operation, which led to this debug_callback should be aborted
+    vk::FALSE
+}
 
 fn main() -> anyhow::Result<()> {
     dotenv::dotenv().ok();
@@ -71,7 +109,7 @@ fn main() -> anyhow::Result<()> {
 /// The 'Instance' returned by this function is not a raw vulkan instance
 /// (this would be vk::Instance), it is an abstraction created by vulkanalia,
 /// which combines the raw vulkan instance and the loaded commands for that instance
-unsafe fn create_instance(window: &Window, entry: &Entry) -> Result<Instance> {
+unsafe fn create_instance(window: &Window, entry: &Entry, data: &mut AppData) -> Result<Instance> {
     // no strictly necessary
     let application_info = vk::ApplicationInfo::builder()
         .application_name(b"Vulkan Tutorial\0")
@@ -108,10 +146,16 @@ unsafe fn create_instance(window: &Window, entry: &Entry) -> Result<Instance> {
     // null terminated c_strings (*const i8)
     //
     // globally means global for the whole program
-    let extensions = vk_window::get_required_instance_extensions(window)
+    let mut extensions = vk_window::get_required_instance_extensions(window)
         .iter()
         .map(|e| e.as_ptr())
         .collect::<Vec<_>>();
+
+    // this extension is needed to set up a custom debug messenger with custom
+    // message callback for validation layers
+    if VALIDATION_ENABLED {
+        extensions.push(vk::EXT_DEBUG_UTILS_EXTENSION.name.as_ptr());
+    }
 
     // create a vulkan instance (the connection between our program and the
     // Vulkan library)
@@ -120,13 +164,26 @@ unsafe fn create_instance(window: &Window, entry: &Entry) -> Result<Instance> {
         .enabled_layer_names(&layers)
         .enabled_extension_names(&extensions);
 
-    Ok(entry.create_instance(&info, None)?)
+    let instance = entry.create_instance(&info, None)?;
+
+    if VALIDATION_ENABLED {
+        let debug_info = vk::DebugUtilsMessengerCreateInfoEXT::builder()
+            .message_severity(vk::DebugUtilsMessageSeverityFlagsEXT::all())
+            .message_type(vk::DebugUtilsMessageTypeFlagsEXT::all())
+            .user_callback(Some(debug_callback));
+
+        // register the debug messenger and store the result in AppData
+        data.messenger = instance.create_debug_utils_messenger_ext(&debug_info, None)?;
+    }
+
+    Ok(instance)
 }
 
 #[derive(Clone, Debug)]
 struct App {
     entry: Entry,
     instance: Instance,
+    data: AppData,
 }
 
 // TODO: expose own safe wrapper around vulkan calls, which asserts the calling
@@ -141,8 +198,9 @@ impl App {
         // load the entry point of the Vulkan library using the loader
         let entry = Entry::new(loader).map_err(|e| anyhow!("{}", e))?;
         // use the window and entry to create a vulkan instance
-        let instance = create_instance(window, &entry)?;
-        Ok(Self { entry, instance })
+        let mut data = AppData::default();
+        let instance = create_instance(window, &entry, &mut data)?;
+        Ok(Self { entry, instance, data })
     }
 
     /// renders one frame
@@ -152,10 +210,17 @@ impl App {
 
     /// destroy the app
     unsafe fn destroy(&mut self) {
+        // if validation is enabled, the debug messenger needs to be destroyed,
+        // before the instance is destroyed
+        if VALIDATION_ENABLED {
+            self.instance.destroy_debug_utils_messenger_ext(self.data.messenger, None);
+        }
         // be explicit about it
         self.instance.destroy_instance(None);
     }
 }
 
 #[derive(Clone, Debug, Default)]
-struct AppData {}
+struct AppData {
+    messenger: vk::DebugUtilsMessengerEXT,
+}
