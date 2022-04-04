@@ -20,6 +20,11 @@ use log::*;
 
 use vulkanalia::vk::ExtDebugUtilsExtension;
 
+const VALIDATION_ENABLED: bool = cfg!(debug_assertions);
+
+const VALIDATION_LAYER: vk::ExtensionName =
+    vk::ExtensionName::from_bytes(b"VK_LAYER_KHRONOS_validation");
+
 fn main() -> anyhow::Result<()> {
     dotenv::dotenv().ok();
     pretty_env_logger::init();
@@ -75,6 +80,27 @@ unsafe fn create_instance(window: &Window, entry: &Entry) -> Result<Instance> {
         .engine_version(vk::make_version(1, 0, 0))
         .api_version(vk::make_version(1, 0, 0));
 
+    // check for availability of validation layers
+    //
+    // seems to be a rust idiom: in order to extract a property of objects in a
+    // collection, get the iterator, use the map-function, to 'remap' the object
+    // to the property and collect all remapped elements in another collection
+    let available_layers = entry
+        .enumerate_instance_layer_properties()?
+        .iter()
+        .map(|l| l.layer_name)
+        .collect::<HashSet<_>>();
+
+    if VALIDATION_ENABLED && !available_layers.contains(&VALIDATION_LAYER) {
+        return Err(anyhow!("Validation layer requested but not supported."));
+    }
+
+    let layers = if VALIDATION_ENABLED {
+        vec![VALIDATION_LAYER.as_ptr()]
+    } else {
+        Vec::new()
+    };
+
     // lots of information is passed to vulkan (and vulkanalia) by passing structs
     // so for creating an instance, we need to fill in one more struct
     //
@@ -91,6 +117,7 @@ unsafe fn create_instance(window: &Window, entry: &Entry) -> Result<Instance> {
     // Vulkan library)
     let info = vk::InstanceCreateInfo::builder()
         .application_info(&application_info)
+        .enabled_layer_names(&layers)
         .enabled_extension_names(&extensions);
 
     Ok(entry.create_instance(&info, None)?)
