@@ -1,12 +1,24 @@
 use anyhow::{anyhow, Result};
+
+// winit related imports (window abstraction)
 use winit::dpi::LogicalSize;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::{Window, WindowBuilder};
-// vulkan imports
+
+// vulkan imports for instance creation
 use vulkanalia::loader::{LibloadingLoader, LIBRARY};
 use vulkanalia::prelude::v1_0::*;
 use vulkanalia::window as vk_window;
+
+// validation layer related imports
+use std::collections::HashSet;
+use std::ffi::CStr;
+use std::os::raw::c_void;
+
+use log::*;
+
+use vulkanalia::vk::ExtDebugUtilsExtension;
 
 fn main() -> anyhow::Result<()> {
     dotenv::dotenv().ok();
