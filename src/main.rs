@@ -1,5 +1,4 @@
 #[allow(dead_code, unused_variables, unused_imports)]
-
 use anyhow::{anyhow, Result};
 
 // winit related imports (window abstraction)
@@ -93,7 +92,7 @@ fn main() -> anyhow::Result<()> {
             } => {
                 destroying = true;
                 *control_flow = ControlFlow::Exit;
-                log::info!("Hello");
+                log::debug!("Hello");
                 unsafe {
                     app.destroy();
                 }
@@ -129,6 +128,10 @@ unsafe fn create_instance(window: &Window, entry: &Entry, data: &mut AppData) ->
         .map(|l| l.layer_name)
         .collect::<HashSet<_>>();
 
+    if VALIDATION_ENABLED {
+        debug!("Setting up validation layers");
+    }
+
     if VALIDATION_ENABLED && !available_layers.contains(&VALIDATION_LAYER) {
         return Err(anyhow!("Validation layer requested but not supported."));
     }
@@ -159,19 +162,30 @@ unsafe fn create_instance(window: &Window, entry: &Entry, data: &mut AppData) ->
 
     // create a vulkan instance (the connection between our program and the
     // Vulkan library)
-    let info = vk::InstanceCreateInfo::builder()
+    let mut info = vk::InstanceCreateInfo::builder()
         .application_info(&application_info)
         .enabled_layer_names(&layers)
         .enabled_extension_names(&extensions);
 
+    let mut debug_info = vk::DebugUtilsMessengerCreateInfoEXT::builder()
+        .message_severity(vk::DebugUtilsMessageSeverityFlagsEXT::all())
+        .message_type(vk::DebugUtilsMessageTypeFlagsEXT::all())
+        // TODO: this does not work. Normal validation works,
+        // tested by removing destroy call to debug messenger before
+        // destroying instance
+        .user_callback(Some(debug_callback));
+
+    if VALIDATION_ENABLED {
+        trace!("Pushing debug_info to InstanceCreateInfo::pnext");
+        // this does not seem to need a mutable instance of info..
+        // this is pretty odd, because push_next will modify the internals of
+        // info, maybe this is related to the above TODO
+        info.push_next(&mut debug_info);
+    }
+
     let instance = entry.create_instance(&info, None)?;
 
     if VALIDATION_ENABLED {
-        let debug_info = vk::DebugUtilsMessengerCreateInfoEXT::builder()
-            .message_severity(vk::DebugUtilsMessageSeverityFlagsEXT::all())
-            .message_type(vk::DebugUtilsMessageTypeFlagsEXT::all())
-            .user_callback(Some(debug_callback));
-
         // register the debug messenger and store the result in AppData
         data.messenger = instance.create_debug_utils_messenger_ext(&debug_info, None)?;
     }
@@ -200,7 +214,11 @@ impl App {
         // use the window and entry to create a vulkan instance
         let mut data = AppData::default();
         let instance = create_instance(window, &entry, &mut data)?;
-        Ok(Self { entry, instance, data })
+        Ok(Self {
+            entry,
+            instance,
+            data,
+        })
     }
 
     /// renders one frame
@@ -213,7 +231,8 @@ impl App {
         // if validation is enabled, the debug messenger needs to be destroyed,
         // before the instance is destroyed
         if VALIDATION_ENABLED {
-            self.instance.destroy_debug_utils_messenger_ext(self.data.messenger, None);
+            self.instance
+                .destroy_debug_utils_messenger_ext(self.data.messenger, None);
         }
         // be explicit about it
         self.instance.destroy_instance(None);
