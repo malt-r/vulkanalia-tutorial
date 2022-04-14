@@ -21,6 +21,8 @@ use log::*;
 
 use vulkanalia::vk::ExtDebugUtilsExtension;
 
+use thiserror::Error;
+
 const VALIDATION_ENABLED: bool = cfg!(debug_assertions);
 
 const VALIDATION_LAYER: vk::ExtensionName =
@@ -200,6 +202,67 @@ struct App {
     data: AppData,
 }
 
+// The error macro of the thiserror-crate enables definition of custom
+// error types in terms of structs or enums without all the boilerplate code
+// which is required for implementing std::error::Error
+//
+// A custom error message can be defined with a format string, which uses members
+// of data structure
+#[derive(Debug, Error)]
+#[error("Missing {0}.")]
+pub struct SuitabilityError(pub &'static str);
+
+unsafe fn pick_physical_device(instance: &Instance, data: &mut AppData) -> Result<()> {
+    for device in instance.enumerate_physical_devices()? {
+        let properties = instance.get_physical_device_properties(device);
+        trace!("Checking physical device {}", properties.device_name);
+        if let Err(error) = check_physical_device(instance, data, device) {
+            warn!("Skipping physical device ('{}'): {}", properties.device_name, error)
+        } else {
+            info!("Selecting physical device ('{}')", properties.device_name);
+            data.physical_device = device;
+            return Ok(());
+        }
+    }
+    Err(anyhow!("Failed to select a physical device"))
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct QueueFamilyIndices {
+    graphics: u32,
+}
+
+impl QueueFamilyIndices {
+    unsafe fn get(instance: &Instance, data: &AppData, physical_device: vk::PhysicalDevice)
+        -> Result<Self> {
+            let properties = instance.get_physical_device_queue_family_properties(physical_device);
+
+            // look for the first queue family, which supports the GRAPHICS property
+            let graphics_property =
+                properties
+                .iter()
+                .position(|p| p.queue_flags.contains(vk::QueueFlags::GRAPHICS))
+                .map(|i| i as u32);
+
+            if let Some(graphics) = graphics_property {
+                Ok(Self {graphics})
+            } else {
+                Err(anyhow!(SuitabilityError("Missing required queue families.")))
+            }
+        }
+}
+
+// we need to check, whether a given physical device
+// is suitable to use for our needs
+unsafe fn check_physical_device(
+    instance: &Instance,
+    data: &AppData,
+    physical_device: vk::PhysicalDevice
+) -> Result<()> {
+    QueueFamilyIndices::get(instance, data, physical_device)?;
+    Ok(())
+}
+
 // TODO: expose own safe wrapper around vulkan calls, which asserts the calling
 // of the correct invariants of the vulkan API functions
 impl App {
@@ -214,6 +277,7 @@ impl App {
         // use the window and entry to create a vulkan instance
         let mut data = AppData::default();
         let instance = create_instance(window, &entry, &mut data)?;
+        pick_physical_device(&instance, &mut data)?;
         Ok(Self {
             entry,
             instance,
@@ -242,4 +306,7 @@ impl App {
 #[derive(Clone, Debug, Default)]
 struct AppData {
     messenger: vk::DebugUtilsMessengerEXT,
+    // this will be implicitly destroyed, if the instance is destroyed,
+    // so no further handling of this in App::destroy() required
+    physical_device: vk::PhysicalDevice,
 }
