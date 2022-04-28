@@ -1,3 +1,4 @@
+// TODO: refactor (split up in multiple files)
 #[allow(dead_code, unused_variables, unused_imports)]
 use anyhow::{anyhow, Result};
 
@@ -200,6 +201,7 @@ struct App {
     entry: Entry,
     instance: Instance,
     data: AppData,
+    device: Device,
 }
 
 // The error macro of the thiserror-crate enables definition of custom
@@ -233,6 +235,8 @@ pub struct QueueFamilyIndices {
 }
 
 impl QueueFamilyIndices {
+    /// gets queue familiy indices for specified vulkan instance and physical device;
+    /// can't be constant, because these indices may vary from device to device
     unsafe fn get(instance: &Instance, data: &AppData, physical_device: vk::PhysicalDevice)
         -> Result<Self> {
             let properties = instance.get_physical_device_queue_family_properties(physical_device);
@@ -263,6 +267,48 @@ unsafe fn check_physical_device(
     Ok(())
 }
 
+unsafe fn create_logical_device(instance: &Instance, data: &mut AppData) -> Result<Device> {
+    // specify queues to be created
+    let indices = QueueFamilyIndices::get(instance, data, data.physical_device)?;
+
+    // the queue priorities specify the prio of a queue for scheduling of
+    // command execution
+    //
+    // From the tutorial:
+    // "The current drivers will only allow you to create a small number of
+    // queues for each queue family and you don't really need more than one."
+    // That's because you can create all of the command buffers on multiple threads
+    // and then submit them all at once from the main thread with a single low-overhead call"
+    let queue_priorities = &[1.0];
+    let queue_info = vk::DeviceQueueCreateInfo::builder()
+        .queue_family_index(indices.graphics)
+        .queue_priorities(queue_priorities);
+
+    // enable device specific layers
+    let layers = if VALIDATION_ENABLED {
+        vec![VALIDATION_LAYER.as_ptr()]
+    } else {
+        vec![]
+    };
+
+    // specify used device features (queried for in check_physical_device)
+    // TODO: nothing special required for now, specify later
+    let features = vk::PhysicalDeviceFeatures::builder();
+
+    // create the logical device
+    // TODO: what is this?
+    let queue_infos = &[queue_info];
+    let info = vk::DeviceCreateInfo::builder()
+        .queue_create_infos(queue_infos)
+        .enabled_layer_names(&layers)
+        .enabled_features(&features);
+    let device = instance.create_device(data.physical_device, &info, None)?;
+
+    // get handle to the graphics queue
+    data.graphics_queue = device.get_device_queue(indices.graphics, 0);
+    Ok(device)
+}
+
 // TODO: expose own safe wrapper around vulkan calls, which asserts the calling
 // of the correct invariants of the vulkan API functions
 impl App {
@@ -278,10 +324,12 @@ impl App {
         let mut data = AppData::default();
         let instance = create_instance(window, &entry, &mut data)?;
         pick_physical_device(&instance, &mut data)?;
+        let device = create_logical_device(&instance, &mut data)?;
         Ok(Self {
             entry,
             instance,
             data,
+            device,
         })
     }
 
@@ -292,6 +340,9 @@ impl App {
 
     /// destroy the app
     unsafe fn destroy(&mut self) {
+        // None is for allocation callbacks
+        self.device.destroy_device(None);
+
         // if validation is enabled, the debug messenger needs to be destroyed,
         // before the instance is destroyed
         if VALIDATION_ENABLED {
@@ -309,4 +360,8 @@ struct AppData {
     // this will be implicitly destroyed, if the instance is destroyed,
     // so no further handling of this in App::destroy() required
     physical_device: vk::PhysicalDevice,
+
+    // queues, which will be created along with logic device creation
+    // queues are implicitly cleaned up, when the device is destroyed
+    graphics_queue: vk::Queue,
 }
