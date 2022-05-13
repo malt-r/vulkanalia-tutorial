@@ -13,6 +13,11 @@ use vulkanalia::loader::{LibloadingLoader, LIBRARY};
 use vulkanalia::prelude::v1_0::*;
 use vulkanalia::window as vk_window;
 
+// suface
+use vulkanalia::vk::KhrSurfaceExtension;
+
+use vulkanalia::vk::KhrXcbSurfaceExtension; // linux specific
+
 // validation layer related imports
 use std::collections::HashSet;
 use std::ffi::CStr;
@@ -232,6 +237,7 @@ unsafe fn pick_physical_device(instance: &Instance, data: &mut AppData) -> Resul
 #[derive(Debug, Copy, Clone)]
 pub struct QueueFamilyIndices {
     graphics: u32,
+    presentation: u32,
 }
 
 impl QueueFamilyIndices {
@@ -248,8 +254,22 @@ impl QueueFamilyIndices {
                 .position(|p| p.queue_flags.contains(vk::QueueFlags::GRAPHICS))
                 .map(|i| i as u32);
 
-            if let Some(graphics) = graphics_property {
-                Ok(Self {graphics})
+            let mut present = None;
+
+            // find the queue family, which supports presentation
+            for (index, properties) in properties.iter().enumerate() {
+                if instance.get_physical_device_surface_support_khr(
+                    physical_device,
+                    index as u32,
+                    data.surface
+                    )? {
+                    present = Some(index as u32);
+                    break;
+                }
+            }
+
+            if let (Some(graphics), Some(present)) = (graphics_property, present) {
+                Ok(Self {graphics, presentation: present})
             } else {
                 Err(anyhow!(SuitabilityError("Missing required queue families.")))
             }
@@ -271,6 +291,10 @@ unsafe fn create_logical_device(instance: &Instance, data: &mut AppData) -> Resu
     // specify queues to be created
     let indices = QueueFamilyIndices::get(instance, data, data.physical_device)?;
 
+    let mut unique_indices = HashSet::new();
+    unique_indices.insert(indices.graphics);
+    unique_indices.insert(indices.presentation);
+
     // the queue priorities specify the prio of a queue for scheduling of
     // command execution
     //
@@ -280,9 +304,14 @@ unsafe fn create_logical_device(instance: &Instance, data: &mut AppData) -> Resu
     // That's because you can create all of the command buffers on multiple threads
     // and then submit them all at once from the main thread with a single low-overhead call"
     let queue_priorities = &[1.0];
-    let queue_info = vk::DeviceQueueCreateInfo::builder()
-        .queue_family_index(indices.graphics)
-        .queue_priorities(queue_priorities);
+    let queue_infos =
+        unique_indices
+        .iter()
+        .map(|i| {
+            vk::DeviceQueueCreateInfo::builder()
+                    .queue_family_index(*i)
+                    .queue_priorities(queue_priorities)
+        }).collect::<Vec<_>>();
 
     // enable device specific layers
     let layers = if VALIDATION_ENABLED {
@@ -297,15 +326,19 @@ unsafe fn create_logical_device(instance: &Instance, data: &mut AppData) -> Resu
 
     // create the logical device
     // TODO: what is this?
-    let queue_infos = &[queue_info];
     let info = vk::DeviceCreateInfo::builder()
-        .queue_create_infos(queue_infos)
+        .queue_create_infos(&queue_infos)
         .enabled_layer_names(&layers)
         .enabled_features(&features);
     let device = instance.create_device(data.physical_device, &info, None)?;
 
     // get handle to the graphics queue
     data.graphics_queue = device.get_device_queue(indices.graphics, 0);
+    data.present_queue = device.get_device_queue(indices.presentation, 0);
+
+    trace!("graphics queue family index: {}", indices.graphics);
+    trace!("presentation queue family index: {}", indices.presentation);
+
     Ok(device)
 }
 
@@ -323,6 +356,10 @@ impl App {
         // use the window and entry to create a vulkan instance
         let mut data = AppData::default();
         let instance = create_instance(window, &entry, &mut data)?;
+
+        // setup window surface
+        data.surface = vk_window::create_surface(&instance, window)?;
+
         pick_physical_device(&instance, &mut data)?;
         let device = create_logical_device(&instance, &mut data)?;
         Ok(Self {
@@ -349,6 +386,8 @@ impl App {
             self.instance
                 .destroy_debug_utils_messenger_ext(self.data.messenger, None);
         }
+
+        self.instance.destroy_surface_khr(self.data.surface, None);
         // be explicit about it
         self.instance.destroy_instance(None);
     }
@@ -356,6 +395,7 @@ impl App {
 
 #[derive(Clone, Debug, Default)]
 struct AppData {
+    surface: vk::SurfaceKHR,
     messenger: vk::DebugUtilsMessengerEXT,
     // this will be implicitly destroyed, if the instance is destroyed,
     // so no further handling of this in App::destroy() required
@@ -364,4 +404,8 @@ struct AppData {
     // queues, which will be created along with logic device creation
     // queues are implicitly cleaned up, when the device is destroyed
     graphics_queue: vk::Queue,
+
+    // the presentation queue also needs to be created with the logic
+    // device
+    present_queue: vk::Queue,
 }

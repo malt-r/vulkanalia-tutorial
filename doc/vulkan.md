@@ -54,3 +54,27 @@ for further operations.
 Every command (drawing, uploading textures, etc.) requires a queue, in which the
 commands are stored, before they are executed. There are different families of queues,
 and every queuefamily only suppports a subset of commands
+
+## logical device ##
+
+- logical devices are required to interface with physical ones
+- specify, which queues should be constructed for usage with the logical device
+
+# Window surface #
+
+- vulkan is platform agnostic, therefore can't render to window by itself
+	- needs a WSI (Window System integration), e.g. VK_KHR_Surface (instance level extension,
+	included in wk_window::get_required_instance_extensions)
+	- surface in vulkanalia tutorial is backed by winit
+- window surface needs to be created right after instance creation (can influence physical device
+  selection)
+- window surfaces are optional in vulkan
+- surface creation is largely dependent on OS-specifics, which are included in
+	vk_window::get_required_instance_extensions and vk_windows::create_surface
+
+## presentation queue
+
+"Presentation is a queue-specific feature, so we need to find the QueueFamily which supports
+this feature"
+- it could be, that the queue-families, which support drawing, do not overlap
+with those which support presentation
