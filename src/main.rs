@@ -357,11 +357,18 @@ unsafe fn create_logical_device(instance: &Instance, data: &mut AppData) -> Resu
     // TODO: nothing special required for now, specify later
     let features = vk::PhysicalDeviceFeatures::builder();
 
+    // convert device_extension Strings to null terminated strings
+    let extensions = DEVICE_EXTENSIONS
+        .iter()
+        .map(|e| e.as_ptr())
+        .collect::<Vec<_>>();
+
     // create the logical device
     // TODO: what is this?
     let info = vk::DeviceCreateInfo::builder()
         .queue_create_infos(&queue_infos)
         .enabled_layer_names(&layers)
+        .enabled_extension_names(&extensions)
         .enabled_features(&features);
     let device = instance.create_device(data.physical_device, &info, None)?;
 
