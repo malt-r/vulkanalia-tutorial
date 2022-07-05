@@ -23,16 +23,24 @@ use std::collections::HashSet;
 use std::ffi::CStr;
 use std::os::raw::c_void;
 
+// swapchain
+use vulkanalia::vk::KhrSwapchainExtension;
+
 use log::*;
 
 use vulkanalia::vk::ExtDebugUtilsExtension;
 
 use thiserror::Error;
 
+// helper
+use std::any::type_name;
+
 const VALIDATION_ENABLED: bool = cfg!(debug_assertions);
 
 const VALIDATION_LAYER: vk::ExtensionName =
     vk::ExtensionName::from_bytes(b"VK_LAYER_KHRONOS_validation");
+
+const DEVICE_EXTENSIONS: &[vk::ExtensionName] = &[vk::KHR_SWAPCHAIN_EXTENSION.name];
 
 /// register a callback function, which will be called from the vulkan library,
 /// if a validation layer message is sent
@@ -70,9 +78,15 @@ extern "system" fn debug_callback(
     vk::FALSE
 }
 
+fn print_type_of<T: ?Sized>(_: &T) {
+    println!("{}", std::any::type_name::<T>())
+}
+
 fn main() -> anyhow::Result<()> {
     dotenv::dotenv().ok();
     pretty_env_logger::init();
+
+    //print_type_of(DEVICE_EXTENSIONS);
 
     // Create window
     let event_loop = EventLoop::new();
@@ -100,7 +114,7 @@ fn main() -> anyhow::Result<()> {
             } => {
                 destroying = true;
                 *control_flow = ControlFlow::Exit;
-                log::debug!("Hello");
+                log::debug!("Exit...");
                 unsafe {
                     app.destroy();
                 }
@@ -284,7 +298,26 @@ unsafe fn check_physical_device(
     physical_device: vk::PhysicalDevice
 ) -> Result<()> {
     QueueFamilyIndices::get(instance, data, physical_device)?;
+    check_physical_device_extensions(instance, physical_device)?;
     Ok(())
+}
+
+unsafe fn check_physical_device_extensions(
+    instance: &Instance,
+    physical_device: vk::PhysicalDevice,
+    ) -> Result<()> {
+    let extensions = instance
+        .enumerate_device_extension_properties(physical_device, None)?
+        .iter()
+        .map(|e| e.extension_name)
+        .collect::<HashSet<_>>();
+
+    // TODO: print, which one is missing
+    if DEVICE_EXTENSIONS.iter().all(|e| extensions.contains(e)) {
+        Ok(())
+    } else {
+        Err(anyhow!(SuitabilityError("Missing required device extensions.")))
+    }
 }
 
 unsafe fn create_logical_device(instance: &Instance, data: &mut AppData) -> Result<Device> {
