@@ -11,6 +11,7 @@ use vulkanalia::vk;
 
 use super::queue::QueueFamilyIndices;
 use super::validation;
+use super::swapchain;
 use crate::app::AppData;
 
 // The error macro of the thiserror-crate enables definition of custom
@@ -34,6 +35,15 @@ unsafe fn check_physical_device(
 ) -> Result<()> {
     QueueFamilyIndices::get(instance, data, physical_device)?;
     check_physical_device_extensions(instance, physical_device)?;
+
+    // check swapchain support
+    let sc_support = swapchain::SwapchainSupport::get(instance, data, physical_device)?;
+
+    // for this example, it suffices, if the swapchain supports at least one surface format
+    // and one present mode
+    if sc_support.formats.is_empty() || sc_support.present_modes.is_empty() {
+        return Err(anyhow!(SuitabilityError("Insufficient swapchain support.")));
+    }
     Ok(())
 }
 
