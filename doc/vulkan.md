@@ -78,3 +78,54 @@ and every queuefamily only suppports a subset of commands
 this feature"
 - it could be, that the queue-families, which support drawing, do not overlap
 with those which support presentation
+
+## swapchains ##
+
+- There is not default framebuffer
+- We need some object to own the buffers to render to -> swapchain
+- basically a queue of images to render and draw to and is used for synchronizing
+presentation and rendering with refreshing of the screen
+- not all devices support rendering (server GPUs), so swapchain support is implemented
+in an extension (vulkanalia::vk::KhrSwapchainExtension)
+- availability of a presentation queue implies support of swapchains
+
+### details of swapchain support ###
+
+- just checking, if swapchains are supported is not sufficient
+- Also needed:
+	- basic surface capabilities (min/max number of images in swapchain, min/max/ width & height)
+	- surface formats (pixel format, color space)
+	- available presentation modes
+
+Choosing right settings for the swapchain
+- surface format (color depth)
+- presentation mode (conditions for swapping images to the screen)
+- swap extent (resolution of images in swapchain)
+
+#### presentation modes ####
+
+Immediate:
+- images submitted by app are transfered to screen immediately -> may cause vertical tearing
+
+FIFO:
+- store fixed amount of images in a queue, if queue is full, app needs to wait
+- screen refreshing moment also known as "vertical blank"
+- is the only mode, which is guaranteed to be supported
+
+FIFO-relaxed:
+- like FIFO, but if the app is late, presentation won't wait for the next vertical
+blank to transfer the image to the screen but will draw it immediately on arrival
+(may cause tearing)
+
+Mailbox:
+- like FIFO, but app won't wait on full queue, but instead render images as fast as
+possible and swap last image with the latest one (also known as 'triple buffering')
+- draw frame as fast as possible without tearing and reduced latency
+- consumes more energy than FIFO
+
+#### swap extent ####
+
+- resolution of swapchain images (almost always exactly equal to resolution of window
+we are drawing to)
+- some window manager allow for deviation of this (indicated by `current_extent` set
+to max value of u32)
