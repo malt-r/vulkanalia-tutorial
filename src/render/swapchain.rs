@@ -162,7 +162,9 @@ pub unsafe fn create_swapchain(
         // don't do that here
 
     data.swapchain = device.create_swapchain_khr(&info, None)?;
-
+    data.swapchain_images = device.get_swapchain_images_khr(data.swapchain)?;
+    data.swapchain_format = surface_format.format;
+    data.swapchain_extent = extent;
 
     Ok(())
 }

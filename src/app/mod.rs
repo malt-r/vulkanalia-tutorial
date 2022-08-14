@@ -38,7 +38,11 @@ pub struct AppData {
     // device
     pub present_queue: vk::Queue,
 
+    // swapchain related data
+    pub swapchain_format: vk::Format,
+    pub swapchain_extent: vk::Extent2D,
     pub swapchain: vk::SwapchainKHR,
+    pub swapchain_images: Vec<vk::Image>,
 }
 
 // TODO: expose own safe wrapper around vulkan calls, which asserts the calling
