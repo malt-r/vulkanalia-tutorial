@@ -168,3 +168,45 @@ pub unsafe fn create_swapchain(
 
     Ok(())
 }
+
+pub unsafe fn create_swapchain_image_views(
+    device: &Device,
+    data: &mut AppData,
+    ) -> Result<()> {
+    // iterate over swapchain images
+    data.swapchain_image_views = data
+        .swapchain_images
+        .iter()
+        .map(|i| {
+            // define color component mapping -> *could* 'swizzle' color channels around
+            // e.g. map all channels to red channel
+            let components = vk::ComponentMapping::builder()
+                .r(vk::ComponentSwizzle::IDENTITY)
+                .g(vk::ComponentSwizzle::IDENTITY)
+                .b(vk::ComponentSwizzle::IDENTITY)
+                .a(vk::ComponentSwizzle::IDENTITY);
+
+            // define subresource range -> describe purpose and which parts of
+            // image should be accessed
+            // we use the images as color targets and don't use mipmaps or multiple layers
+            let subresource_range = vk::ImageSubresourceRange::builder()
+                .aspect_mask(vk::ImageAspectFlags::COLOR)
+                .base_mip_level(0)
+                .level_count(1)
+                .base_array_layer(0)
+                .layer_count(1);
+
+            // create image view create info..
+            let info = vk::ImageViewCreateInfo::builder()
+                .image(*i)
+                .view_type(vk::ImageViewType::_2D) // specifies, how the image data should be interpreted, allows to treat images as 1D, 2D, 3D and cube maps
+                .format(data.swapchain_format)
+                .components(components)
+                .subresource_range(subresource_range);
+
+            device.create_image_view(&info, None)
+        })
+    .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(())
+}

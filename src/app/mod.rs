@@ -43,7 +43,11 @@ pub struct AppData {
     pub swapchain_extent: vk::Extent2D,
     pub swapchain: vk::SwapchainKHR,
     pub swapchain_images: Vec<vk::Image>,
+
+    // image views
+    pub swapchain_image_views: Vec<vk::ImageView>,
 }
+
 
 // TODO: expose own safe wrapper around vulkan calls, which asserts the calling
 // of the correct invariants of the vulkan API functions
@@ -83,6 +87,10 @@ impl App {
 
     /// destroy the app
     pub unsafe fn destroy(&mut self) {
+        self.data.swapchain_image_views
+            .iter()
+            .for_each(|v| self.device.destroy_image_view(*v, None));
+
         self.device.destroy_swapchain_khr(self.data.swapchain, None);
         // None is for allocation callbacks
         self.device.destroy_device(None);
