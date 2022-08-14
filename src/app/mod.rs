@@ -4,7 +4,7 @@ use anyhow::{anyhow, Result};
 
 use vulkanalia::loader::{LibloadingLoader, LIBRARY};
 use vulkanalia::prelude::v1_0::*;
-use vulkanalia::vk::{ExtDebugUtilsExtension, KhrSurfaceExtension};
+use vulkanalia::vk::{ExtDebugUtilsExtension, KhrSurfaceExtension, KhrSwapchainExtension};
 use vulkanalia::window as vk_window;
 
 use winit::window::Window;
@@ -12,6 +12,7 @@ use winit::window::Window;
 use crate::render::device;
 use crate::render::instance;
 use crate::render::validation;
+use crate::render::swapchain;
 
 #[derive(Clone, Debug)]
 pub struct App {
@@ -36,6 +37,8 @@ pub struct AppData {
     // the presentation queue also needs to be created with the logic
     // device
     pub present_queue: vk::Queue,
+
+    pub swapchain: vk::SwapchainKHR,
 }
 
 // TODO: expose own safe wrapper around vulkan calls, which asserts the calling
@@ -58,6 +61,9 @@ impl App {
 
         device::pick_physical_device(&instance, &mut data)?;
         let device = device::create_logical_device(&instance, &mut data)?;
+
+        swapchain::create_swapchain(window, &instance, &device, &mut data)?;
+
         Ok(Self {
             entry,
             instance,
@@ -73,6 +79,7 @@ impl App {
 
     /// destroy the app
     pub unsafe fn destroy(&mut self) {
+        self.device.destroy_swapchain_khr(self.data.swapchain, None);
         // None is for allocation callbacks
         self.device.destroy_device(None);
 

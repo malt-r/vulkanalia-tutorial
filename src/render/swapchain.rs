@@ -1,14 +1,15 @@
 #[allow(dead_code, unused_variables, unused_imports)]
 use anyhow::{anyhow, Result};
 
+use log::info;
 use vulkanalia::prelude::v1_0::*;
 use vulkanalia::vk::KhrSurfaceExtension;
-
-
+use vulkanalia::vk::KhrSwapchainExtension;
 
 
 use winit::window::Window;
 use crate::app::AppData;
+use crate::render::queue::QueueFamilyIndices;
 
 #[derive(Clone, Debug)]
 pub struct SwapchainSupport {
@@ -99,4 +100,69 @@ fn get_swapchain_extent(
                     ))
             .build()
     }
+}
+
+pub unsafe fn create_swapchain(
+    window: &Window,
+    instance: &Instance,
+    device: &Device,
+    data: &mut AppData,
+    ) -> Result<()> {
+    let indices = QueueFamilyIndices::get(instance, data, data.physical_device)?;
+    let support = SwapchainSupport::get(instance, data, data.physical_device)?;
+
+    let surface_format = get_swapchain_surface_format(&support.formats);
+    let present_mode = get_swapchain_present_mode(&support.present_modes);
+    let extent = get_swapchain_extent(window, support.capabilities);
+
+    // strictly sticking to the minimum image count would mean, that we
+    // sometimes have to wait for the driver to complete internal operations
+    // before we can acquire another image to render to
+    let mut image_count = support.capabilities.min_image_count + 1;
+    if support.capabilities.max_image_count != 0
+        && image_count > support.capabilities.max_image_count {
+            image_count = support.capabilities.max_image_count;
+        }
+
+    // define sharing mode for images, which are shared across multiple queue
+    // families -> use concurrent mode, if graphics and presentation queue family
+    // are not the same, otherwise use exclusive (concurrent needs at least 2 distinct
+    // queue families)
+    let mut queue_family_indices = vec![];
+    let image_sharing_mode = if indices.graphics != indices.presentation {
+        queue_family_indices.push(indices.graphics);
+        queue_family_indices.push(indices.presentation);
+        vk::SharingMode::CONCURRENT
+    } else {
+        vk::SharingMode::EXCLUSIVE
+    };
+
+    info!("Creating swapchain");
+
+    // fill out the swapchain creation structure
+    let info = vk::SwapchainCreateInfoKHR::builder()
+        .surface(data.surface)
+        // details of swapchain images
+        .min_image_count(image_count)
+        .image_format(surface_format.format)
+        .image_color_space(surface_format.color_space)
+        .image_extent(extent)
+        .image_array_layers(1) // always 1, instead for stereoskopic 3D app..
+        .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT) // COLOR_ATTACHMENT for
+        // direct rendering, TRANSFER_DST for rendering to separate images
+        .image_sharing_mode(image_sharing_mode)
+        .queue_family_indices(&queue_family_indices)
+        .pre_transform(support.capabilities.current_transform) // could specify, that certain transform be applied to images in swapchain (90 deg rotate, horizontal flip)
+        .composite_alpha(vk::CompositeAlphaFlagsKHR::OPAQUE) // specifies, if alpha should be
+        // used for blending with other windows in window system
+        .present_mode(present_mode)
+        .clipped(true) // don't care about pixels, which are obscured by other windows -> better performance
+        .old_swapchain(vk::SwapchainKHR::null()); // if swapchain gets invalidated
+        // (on window resize) we need to recreate it and pass the old one, but we
+        // don't do that here
+
+    data.swapchain = device.create_swapchain_khr(&info, None)?;
+
+
+    Ok(())
 }
