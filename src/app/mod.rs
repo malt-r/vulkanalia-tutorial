@@ -13,6 +13,7 @@ use crate::render::device;
 use crate::render::instance;
 use crate::render::validation;
 use crate::render::swapchain;
+use crate::render::pipeline;
 
 #[derive(Clone, Debug)]
 pub struct App {
@@ -46,6 +47,8 @@ pub struct AppData {
 
     // image views
     pub swapchain_image_views: Vec<vk::ImageView>,
+
+    pub pipeline_layout: vk::PipelineLayout,
 }
 
 
@@ -71,6 +74,7 @@ impl App {
         let device = device::create_logical_device(&instance, &mut data)?;
 
         swapchain::create_swapchain(window, &instance, &device, &mut data)?;
+        pipeline::create_pipeline(&device, &mut data)?;
 
         Ok(Self {
             entry,
@@ -87,6 +91,8 @@ impl App {
 
     /// destroy the app
     pub unsafe fn destroy(&mut self) {
+        self.device.destroy_pipeline_layout(self.data.pipeline_layout, None);
+
         self.data.swapchain_image_views
             .iter()
             .for_each(|v| self.device.destroy_image_view(*v, None));
