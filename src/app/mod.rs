@@ -48,6 +48,7 @@ pub struct AppData {
     // image views
     pub swapchain_image_views: Vec<vk::ImageView>,
 
+    pub render_pass: vk::RenderPass,
     pub pipeline_layout: vk::PipelineLayout,
 }
 
@@ -92,6 +93,7 @@ impl App {
     /// destroy the app
     pub unsafe fn destroy(&mut self) {
         self.device.destroy_pipeline_layout(self.data.pipeline_layout, None);
+        self.device.destroy_render_pass(self.data.render_pass, None);
 
         self.data.swapchain_image_views
             .iter()
