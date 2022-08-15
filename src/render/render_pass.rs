@@ -5,7 +5,7 @@ use vulkanalia::prelude::v1_0::*;
 
 use crate::app::AppData;
 
-unsafe fn create_render_pass (
+pub unsafe fn create_render_pass (
     insntance: &Instance,
     device: &Device,
     data: &mut AppData

@@ -137,7 +137,7 @@ pub unsafe fn create_swapchain(
         vk::SharingMode::EXCLUSIVE
     };
 
-    info!("Creating swapchain");
+    info!("Created swapchain");
 
     // fill out the swapchain creation structure
     let info = vk::SwapchainCreateInfoKHR::builder()
