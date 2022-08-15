@@ -15,6 +15,7 @@ use crate::render::validation;
 use crate::render::swapchain;
 use crate::render::pipeline;
 use crate::render::render_pass;
+use crate::render::framebuffer;
 
 #[derive(Clone, Debug)]
 pub struct App {
@@ -53,6 +54,8 @@ pub struct AppData {
     pub pipeline_layout: vk::PipelineLayout,
 
     pub pipeline: vk::Pipeline,
+
+    pub framebuffers: Vec<vk::Framebuffer>,
 }
 
 
@@ -80,6 +83,7 @@ impl App {
         swapchain::create_swapchain(window, &instance, &device, &mut data)?;
         render_pass::create_render_pass(&instance, &device, &mut data)?;
         pipeline::create_pipeline(&device, &mut data)?;
+        framebuffer::create_framebuffers(&device, &mut data)?;
 
         Ok(Self {
             entry,
@@ -96,6 +100,10 @@ impl App {
 
     /// destroy the app
     pub unsafe fn destroy(&mut self) {
+        self.data.framebuffers
+            .iter()
+            .for_each(|f| self.device.destroy_framebuffer(*f, None));
+
         self.device.destroy_pipeline(self.data.pipeline, None);
 
         self.device.destroy_pipeline_layout(self.data.pipeline_layout, None);
