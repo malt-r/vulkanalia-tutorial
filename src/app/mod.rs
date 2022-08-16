@@ -60,6 +60,9 @@ pub struct AppData {
 
     pub command_pool: vk::CommandPool,
     pub command_buffers: Vec<vk::CommandBuffer>,
+
+    pub image_ready_sem: vk::Semaphore,
+    pub render_finished_sem: vk::Semaphore,
 }
 
 // TODO: expose own safe wrapper around vulkan calls, which asserts the calling
@@ -99,11 +102,50 @@ impl App {
 
     /// renders one frame
     pub unsafe fn render(&mut self, window: &Window) -> Result<()> {
+        // Each of the actions required for rendering is executed by calling
+        // a single function, which executes asynchronously -> requires synchronization
+        //
+        // Two types: Fences and Semaphores
+        // - Fences: state can be queried from program to synchronize app itself
+        //   with rendering
+        // - Semaphores: state can't be queried from program, used to synchronize
+        //   rendering internally
+        // TODO: acquire image from swapchain
+        let image_index = self
+            .device
+            .acquire_next_image_khr(
+                self.data.swapchain,
+                u64::max_value(),
+                self.data.image_ready_sem,
+                vk::Fence::null()
+                )?.0 as usize;
+
+        // TODO: execute command buffer
+        let wait_semaphores = &[self.data.image_ready_sem];
+        let command_buffers = &[self.data.command_buffers[image_index]];
+        let signal_semaphores = &[self.data.render_finished_sem];
+        let wait_stages = &[vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
+
+        let submit_info = vk::SubmitInfo::builder()
+            .wait_semaphores(wait_semaphores) // for which semaphore to wait
+            .wait_dst_stage_mask(wait_stages) // in which stage(s) of the pipeline should we wait?
+                                              // -> wait before the part of the pipeline, which
+                                              // writes color to the color attachment
+            .command_buffers(command_buffers) // which command_buffers should be used?
+            .signal_semaphores(signal_semaphores); // which semaphores should be signaled on finish
+
+        self.device.queue_submit(self.data.graphics_queue, &[submit_info], vk::Fence::null())?;
+
+        // TODO: return image to swapchain for presentation
+
         Ok(())
     }
 
     /// destroy the app
     pub unsafe fn destroy(&mut self) {
+        self.device.destroy_semaphore(self.data.image_ready_sem, None);
+        self.device.destroy_semaphore(self.data.render_finished_sem, None);
+
         // destroying a command pool will free all ressources of the associated
         // command buffers
         self.device

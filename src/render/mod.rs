@@ -8,3 +8,4 @@ mod queue;
 pub(crate) mod render_pass;
 pub(crate) mod swapchain;
 pub(crate) mod validation;
+pub(crate) mod synchronization;
