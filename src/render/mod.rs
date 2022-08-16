@@ -6,3 +6,5 @@ pub(crate) mod validation;
 pub(crate) mod pipeline;
 pub(crate) mod render_pass;
 pub(crate) mod framebuffer;
+pub(crate) mod command_buffer;
+pub(crate) mod command_pool;

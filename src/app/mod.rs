@@ -16,6 +16,7 @@ use crate::render::swapchain;
 use crate::render::pipeline;
 use crate::render::render_pass;
 use crate::render::framebuffer;
+use crate::render::command_pool;
 
 #[derive(Clone, Debug)]
 pub struct App {
@@ -56,6 +57,8 @@ pub struct AppData {
     pub pipeline: vk::Pipeline,
 
     pub framebuffers: Vec<vk::Framebuffer>,
+
+    pub command_pool: vk::CommandPool,
 }
 
 
@@ -84,6 +87,7 @@ impl App {
         render_pass::create_render_pass(&instance, &device, &mut data)?;
         pipeline::create_pipeline(&device, &mut data)?;
         framebuffer::create_framebuffers(&device, &mut data)?;
+        command_pool::create_command_pool(&instance, &device, &mut data)?;
 
         Ok(Self {
             entry,
