@@ -10,8 +10,8 @@ use vulkanalia::prelude::v1_0::*;
 use vulkanalia::vk;
 
 use super::queue::QueueFamilyIndices;
-use super::validation;
 use super::swapchain;
+use super::validation;
 use crate::app::AppData;
 
 // The error macro of the thiserror-crate enables definition of custom

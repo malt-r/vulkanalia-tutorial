@@ -9,14 +9,14 @@ use vulkanalia::window as vk_window;
 
 use winit::window::Window;
 
+use crate::render::command_pool;
 use crate::render::device;
+use crate::render::framebuffer;
 use crate::render::instance;
-use crate::render::validation;
-use crate::render::swapchain;
 use crate::render::pipeline;
 use crate::render::render_pass;
-use crate::render::framebuffer;
-use crate::render::command_pool;
+use crate::render::swapchain;
+use crate::render::validation;
 
 #[derive(Clone, Debug)]
 pub struct App {
@@ -59,8 +59,8 @@ pub struct AppData {
     pub framebuffers: Vec<vk::Framebuffer>,
 
     pub command_pool: vk::CommandPool,
+    pub command_buffers: Vec<vk::CommandBuffer>,
 }
-
 
 // TODO: expose own safe wrapper around vulkan calls, which asserts the calling
 // of the correct invariants of the vulkan API functions
@@ -104,16 +104,24 @@ impl App {
 
     /// destroy the app
     pub unsafe fn destroy(&mut self) {
-        self.data.framebuffers
+        // destroying a command pool will free all ressources of the associated
+        // command buffers
+        self.device
+            .destroy_command_pool(self.data.command_pool, None);
+
+        self.data
+            .framebuffers
             .iter()
             .for_each(|f| self.device.destroy_framebuffer(*f, None));
 
         self.device.destroy_pipeline(self.data.pipeline, None);
 
-        self.device.destroy_pipeline_layout(self.data.pipeline_layout, None);
+        self.device
+            .destroy_pipeline_layout(self.data.pipeline_layout, None);
         self.device.destroy_render_pass(self.data.render_pass, None);
 
-        self.data.swapchain_image_views
+        self.data
+            .swapchain_image_views
             .iter()
             .for_each(|v| self.device.destroy_image_view(*v, None));
 

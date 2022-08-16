@@ -6,10 +6,9 @@ use vulkanalia::prelude::v1_0::*;
 use vulkanalia::vk::KhrSurfaceExtension;
 use vulkanalia::vk::KhrSwapchainExtension;
 
-
-use winit::window::Window;
 use crate::app::AppData;
 use crate::render::queue::QueueFamilyIndices;
+use winit::window::Window;
 
 #[derive(Clone, Debug)]
 pub struct SwapchainSupport {
@@ -23,24 +22,19 @@ impl SwapchainSupport {
         instance: &Instance,
         data: &AppData,
         physical_device: vk::PhysicalDevice,
-        ) -> Result<Self> {
+    ) -> Result<Self> {
         Ok(Self {
             capabilities: instance
-                .get_physical_device_surface_capabilities_khr(
-                    physical_device, data.surface)?,
+                .get_physical_device_surface_capabilities_khr(physical_device, data.surface)?,
             formats: instance
-                .get_physical_device_surface_formats_khr(
-                    physical_device, data.surface)?,
+                .get_physical_device_surface_formats_khr(physical_device, data.surface)?,
             present_modes: instance
-                .get_physical_device_surface_present_modes_khr(
-                    physical_device, data.surface)?,
+                .get_physical_device_surface_present_modes_khr(physical_device, data.surface)?,
         })
     }
 }
 
-fn get_swapchain_surface_format(
-    formats: &[vk::SurfaceFormatKHR],
-) -> vk::SurfaceFormatKHR {
+fn get_swapchain_surface_format(formats: &[vk::SurfaceFormatKHR]) -> vk::SurfaceFormatKHR {
     // each entry contains a color_space and a format member
     // - format: color channels and types (vk::Format::B8G8R8A8_SRGB -> BGR and
     //   alpha stored in 8 bit unsigned integer)
@@ -58,9 +52,7 @@ fn get_swapchain_surface_format(
         .unwrap_or_else(|| formats[0]) // use selected or first one, if sRGB is not available
 }
 
-fn get_swapchain_present_mode(
-    present_modes: &[vk::PresentModeKHR]
-) -> vk::PresentModeKHR {
+fn get_swapchain_present_mode(present_modes: &[vk::PresentModeKHR]) -> vk::PresentModeKHR {
     // check, if Mailbox mode is supported, otherwise select FIFO (guaranteed
     // to be supported)
     present_modes
@@ -70,10 +62,7 @@ fn get_swapchain_present_mode(
         .unwrap_or(vk::PresentModeKHR::FIFO)
 }
 
-fn get_swapchain_extent(
-    window: &Window,
-    capabilities: vk::SurfaceCapabilitiesKHR,
-    ) -> vk::Extent2D {
+fn get_swapchain_extent(window: &Window, capabilities: vk::SurfaceCapabilitiesKHR) -> vk::Extent2D {
     // if current_extent is set to u32::max, then we need to set the extent
     // specifically to the inner_size of the window
 
@@ -89,15 +78,15 @@ fn get_swapchain_extent(
 
         vk::Extent2D::builder()
             .width(clamp(
-                    capabilities.min_image_extent.width,
-                    capabilities.max_image_extent.width,
-                    size.width
-                    ))
+                capabilities.min_image_extent.width,
+                capabilities.max_image_extent.width,
+                size.width,
+            ))
             .height(clamp(
-                    capabilities.min_image_extent.height,
-                    capabilities.max_image_extent.height,
-                    size.height
-                    ))
+                capabilities.min_image_extent.height,
+                capabilities.max_image_extent.height,
+                size.height,
+            ))
             .build()
     }
 }
@@ -107,7 +96,7 @@ pub unsafe fn create_swapchain(
     instance: &Instance,
     device: &Device,
     data: &mut AppData,
-    ) -> Result<()> {
+) -> Result<()> {
     let indices = QueueFamilyIndices::get(instance, data, data.physical_device)?;
     let support = SwapchainSupport::get(instance, data, data.physical_device)?;
 
@@ -120,9 +109,10 @@ pub unsafe fn create_swapchain(
     // before we can acquire another image to render to
     let mut image_count = support.capabilities.min_image_count + 1;
     if support.capabilities.max_image_count != 0
-        && image_count > support.capabilities.max_image_count {
-            image_count = support.capabilities.max_image_count;
-        }
+        && image_count > support.capabilities.max_image_count
+    {
+        image_count = support.capabilities.max_image_count;
+    }
 
     // define sharing mode for images, which are shared across multiple queue
     // families -> use concurrent mode, if graphics and presentation queue family
@@ -158,8 +148,8 @@ pub unsafe fn create_swapchain(
         .present_mode(present_mode)
         .clipped(true) // don't care about pixels, which are obscured by other windows -> better performance
         .old_swapchain(vk::SwapchainKHR::null()); // if swapchain gets invalidated
-        // (on window resize) we need to recreate it and pass the old one, but we
-        // don't do that here
+                                                  // (on window resize) we need to recreate it and pass the old one, but we
+                                                  // don't do that here
 
     data.swapchain = device.create_swapchain_khr(&info, None)?;
     data.swapchain_images = device.get_swapchain_images_khr(data.swapchain)?;
@@ -169,10 +159,7 @@ pub unsafe fn create_swapchain(
     Ok(())
 }
 
-pub unsafe fn create_swapchain_image_views(
-    device: &Device,
-    data: &mut AppData,
-    ) -> Result<()> {
+pub unsafe fn create_swapchain_image_views(device: &Device, data: &mut AppData) -> Result<()> {
     // iterate over swapchain images
     data.swapchain_image_views = data
         .swapchain_images
@@ -206,7 +193,7 @@ pub unsafe fn create_swapchain_image_views(
 
             device.create_image_view(&info, None)
         })
-    .collect::<Result<Vec<_>, _>>()?;
+        .collect::<Result<Vec<_>, _>>()?;
 
     Ok(())
 }

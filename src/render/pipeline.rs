@@ -20,8 +20,8 @@ pub unsafe fn create_pipeline(device: &Device, data: &mut AppData) -> Result<()>
         .stage(vk::ShaderStageFlags::VERTEX) // in which pipeline stage should we use it
         .module(vert_shader_module)
         .name(b"main\0"); // specify name of entrypoint -> it's possible to combine
-        // multiple shaders in one bytecode file and reference different shaders in
-        // pipeline creation
+                          // multiple shaders in one bytecode file and reference different shaders in
+                          // pipeline creation
 
     let frag_stage = vk::PipelineShaderStageCreateInfo::builder()
         .stage(vk::ShaderStageFlags::FRAGMENT)
@@ -150,14 +150,16 @@ pub unsafe fn create_pipeline(device: &Device, data: &mut AppData) -> Result<()>
         // render pass
         .render_pass(data.render_pass)
         .subpass(0); // "index of the subpass in the renderpass where this pipeline will be used"
-        // .base_pipeline_handle(vk::Pipeline::null()) // would be used to derive from another pipeline
-        // .base_pipeline_index(-1) // could be used to derive from another pipeline by idx
+                     // .base_pipeline_handle(vk::Pipeline::null()) // would be used to derive from another pipeline
+                     // .base_pipeline_index(-1) // could be used to derive from another pipeline by idx
 
-    data.pipeline = device.create_graphics_pipelines(
-        vk::PipelineCache::null(), // could be used to reference a pipeline cache -> significantly speed up pipeline creation
-        &[info],
-        None
-        )?.0;
+    data.pipeline = device
+        .create_graphics_pipelines(
+            vk::PipelineCache::null(), // could be used to reference a pipeline cache -> significantly speed up pipeline creation
+            &[info],
+            None,
+        )?
+        .0;
 
     info!("Created pipeline");
 
@@ -167,10 +169,7 @@ pub unsafe fn create_pipeline(device: &Device, data: &mut AppData) -> Result<()>
     Ok(())
 }
 
-unsafe fn create_shader_module(
-    device: &Device,
-    bytecode: &[u8],
-) ->Result<vk::ShaderModule> {
+unsafe fn create_shader_module(device: &Device, bytecode: &[u8]) -> Result<vk::ShaderModule> {
     // this will pass the bytecode to ShaderModuleCreateInfo, which expects an &[u32]
     // slice -> use slice::align_to to convert the &[u8], but have to make sure
     // that the slice matches the alignment requirements. We can't be sure of that,

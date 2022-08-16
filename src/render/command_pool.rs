@@ -4,10 +4,10 @@ use vulkanalia::prelude::v1_0::*;
 use crate::app::AppData;
 use crate::render::queue;
 
-pub unsafe fn create_command_pool (
+pub unsafe fn create_command_pool(
     instance: &Instance,
     device: &Device,
-    data: &mut AppData
+    data: &mut AppData,
 ) -> Result<()> {
     // command_pools are used to create command buffers, which will then be
     // submitted to a device queue -> each command_pool can only allocate
