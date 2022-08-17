@@ -46,11 +46,40 @@ pub unsafe fn create_render_pass(
         .color_attachments(attachment_references); // there are other attachment-types!
 
     // --- define render pass ---
+
+    // TODO: understand this!
+    // the layout transitions before and after the draw command are counted
+    // as implicit "subpasses", therefore are relevant for subpass dependency
+    // considerations
+    //
+    // the transformation before the drawcommand assumes, that the transition
+    // occurs at the start of the pipeline, but we have not acquired the image
+    // then -> add dependency on vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
+    let dependency = vk::SubpassDependency::builder()
+        // SUBPASS_EXTERNAL refers to the implicit subpass before or after
+        // the render pass, depending on whether it is specified in src_subpass
+        // or dst_subpass
+        .src_subpass(vk::SUBPASS_EXTERNAL) // on which subpass do we depend?
+        .dst_subpass(0) // refers to our subpass, which is the first and only one
+        // define, operations to wait on and stage(s) in which these operations
+        // occur -> we need to wait for swapchain to read from image -> wait
+        // for color attachment output itself
+        .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
+        .src_access_mask(vk::AccessFlags::empty())
+        // operations, that should wait on this are in color attachment stage
+        // and involve writing of color attachment -> this will prevent
+        // transition from happening until it's actually necessary (and allowed):
+        // when we want to start writing colors to it..
+        .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
+        .dst_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE);
+
     let attachements = &[color_attachment];
     let subpasses = &[subpass];
+    let dependencies = &[dependency];
     let info = vk::RenderPassCreateInfo::builder()
         .attachments(attachements)
-        .subpasses(subpasses);
+        .subpasses(subpasses)
+        .dependencies(dependencies);
 
     data.render_pass = device.create_render_pass(&info, None)?;
 
