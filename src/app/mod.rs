@@ -17,6 +17,8 @@ use crate::render::pipeline;
 use crate::render::render_pass;
 use crate::render::swapchain;
 use crate::render::validation;
+use crate::render::command_buffer;
+use crate::render::synchronization;
 
 #[derive(Clone, Debug)]
 pub struct App {
@@ -24,7 +26,11 @@ pub struct App {
     instance: Instance,
     data: AppData,
     device: Device,
+    // current frame index for multiple frames in flight
+    frame: usize,
 }
+
+pub const MAX_FRAMES_IN_FLIGHT: usize = 2;
 
 #[derive(Clone, Debug, Default)]
 pub struct AppData {
@@ -61,8 +67,16 @@ pub struct AppData {
     pub command_pool: vk::CommandPool,
     pub command_buffers: Vec<vk::CommandBuffer>,
 
-    pub image_ready_sem: vk::Semaphore,
-    pub render_finished_sem: vk::Semaphore,
+    pub image_ready_semaphores: Vec<vk::Semaphore>,
+    pub render_finished_semaphores: Vec<vk::Semaphore>,
+
+    pub in_flight_fences: Vec<vk::Fence>,
+
+    // used to keep track of which images are currently in flight
+    // acquire_next_image_khr may return images out of order or MAX_FRAMES_IN_FLIGHT
+    // could be higher than the number of swapchain images, so we could end up
+    // rendering to a swapchain image, that is already in flight
+    pub images_in_flight: Vec<vk::Fence>,
 }
 
 // TODO: expose own safe wrapper around vulkan calls, which asserts the calling
@@ -89,19 +103,29 @@ impl App {
         swapchain::create_swapchain(window, &instance, &device, &mut data)?;
         render_pass::create_render_pass(&instance, &device, &mut data)?;
         pipeline::create_pipeline(&device, &mut data)?;
+        swapchain::create_swapchain_image_views(&device, &mut data)?;
         framebuffer::create_framebuffers(&device, &mut data)?;
         command_pool::create_command_pool(&instance, &device, &mut data)?;
+        command_buffer::create_command_buffers(&device, &mut data)?;
+        synchronization::create_sync_objects(&device, &mut data)?;
 
         Ok(Self {
             entry,
             instance,
             data,
             device,
+            frame: 0
         })
     }
 
     /// renders one frame
     pub unsafe fn render(&mut self, window: &Window) -> Result<()> {
+        self.device.wait_for_fences(
+            &[self.data.in_flight_fences[self.frame]],
+            true,
+            u64::max_value(),
+            )?;
+
         // Each of the actions required for rendering is executed by calling
         // a single function, which executes asynchronously -> requires synchronization
         //
@@ -110,20 +134,30 @@ impl App {
         //   with rendering
         // - Semaphores: state can't be queried from program, used to synchronize
         //   rendering internally
-        // TODO: acquire image from swapchain
         let image_index = self
             .device
             .acquire_next_image_khr(
                 self.data.swapchain,
                 u64::max_value(),
-                self.data.image_ready_sem,
+                self.data.image_ready_semaphores[self.frame],
                 vk::Fence::null()
                 )?.0 as usize;
 
-        // TODO: execute command buffer
-        let wait_semaphores = &[self.data.image_ready_sem];
+        // TODO: verstehen
+        if !self.data.images_in_flight[image_index].is_null() {
+            self.device.wait_for_fences(
+                &[self.data.images_in_flight[image_index]],
+                true,
+                u64::max_value(),
+                )?;
+        }
+
+        self.data.images_in_flight[image_index] =
+            self.data.in_flight_fences[self.frame];
+
+        let wait_semaphores = &[self.data.image_ready_semaphores[self.frame]];
         let command_buffers = &[self.data.command_buffers[image_index]];
-        let signal_semaphores = &[self.data.render_finished_sem];
+        let signal_semaphores = &[self.data.render_finished_semaphores[self.frame]];
         let wait_stages = &[vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
 
         let submit_info = vk::SubmitInfo::builder()
@@ -134,17 +168,44 @@ impl App {
             .command_buffers(command_buffers) // which command_buffers should be used?
             .signal_semaphores(signal_semaphores); // which semaphores should be signaled on finish
 
-        self.device.queue_submit(self.data.graphics_queue, &[submit_info], vk::Fence::null())?;
+        self.device.reset_fences(&[self.data.in_flight_fences[self.frame]])?;
+        self.device.queue_submit (
+                self.data.graphics_queue,
+                &[submit_info],
+                self.data.in_flight_fences[self.frame] // TODO: explain
+            )?;
 
-        // TODO: return image to swapchain for presentation
+        let swapchains = &[self.data.swapchain];
+        let image_indices = &[image_index as u32];
+        let present_info = vk::PresentInfoKHR::builder()
+            .wait_semaphores(signal_semaphores) // what sem to wait for, before presentation happens
+            // swapchains to present image to and index of image for each swapchain
+            // -> almost always a single one
+            .swapchains(swapchains)
+            .image_indices(image_indices);
+
+        self.device.queue_present_khr(self.data.present_queue, &present_info)?;
+
+        self.frame = (self.frame + 1) % MAX_FRAMES_IN_FLIGHT;
 
         Ok(())
     }
 
     /// destroy the app
     pub unsafe fn destroy(&mut self) {
-        self.device.destroy_semaphore(self.data.image_ready_sem, None);
-        self.device.destroy_semaphore(self.data.render_finished_sem, None);
+        self.device.device_wait_idle().unwrap();
+
+        self.data.in_flight_fences
+            .iter()
+            .for_each(|f| self.device.destroy_fence(*f, None));
+
+        self.data.render_finished_semaphores
+            .iter()
+            .for_each(|s| self.device.destroy_semaphore(*s, None));
+
+        self.data.image_ready_semaphores
+            .iter()
+            .for_each(|s| self.device.destroy_semaphore(*s, None));
 
         // destroying a command pool will free all ressources of the associated
         // command buffers

@@ -41,9 +41,7 @@ fn main() -> anyhow::Result<()> {
                 destroying = true;
                 *control_flow = ControlFlow::Exit;
                 log::debug!("Exit...");
-                unsafe {
-                    app.destroy();
-                }
+                unsafe { app.destroy(); }
             }
             _ => {}
         }

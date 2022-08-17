@@ -10,6 +10,8 @@ use crate::app::AppData;
 // The image we use for attachment depends on which image is returned by the swapchain
 // if we retrieve one for presentation -> create framebuffers for each imageView!
 pub unsafe fn create_framebuffers(device: &Device, data: &mut AppData) -> Result<()> {
+    debug_assert!(data.swapchain_image_views.len() > 0);
+
     data.framebuffers = data
         .swapchain_image_views
         .iter()
@@ -28,6 +30,8 @@ pub unsafe fn create_framebuffers(device: &Device, data: &mut AppData) -> Result
             device.create_framebuffer(&create_info, None)
         })
         .collect::<Result<Vec<_>, _>>()?;
+
+    debug_assert!(data.framebuffers.len() > 0);
 
     Ok(())
 }

@@ -1,6 +1,7 @@
 #[allow(dead_code, unused_variables, unused_imports)]
 use anyhow::{anyhow, Result};
 
+use log::debug;
 use log::info;
 use vulkanalia::prelude::v1_0::*;
 use vulkanalia::vk::KhrSurfaceExtension;
@@ -114,6 +115,9 @@ pub unsafe fn create_swapchain(
         image_count = support.capabilities.max_image_count;
     }
 
+    debug!("max swapchain images: {:?}", support.capabilities.max_image_count);
+    debug_assert!(support.capabilities.max_image_count == 0 || image_count <= support.capabilities.max_image_count);
+
     // define sharing mode for images, which are shared across multiple queue
     // families -> use concurrent mode, if graphics and presentation queue family
     // are not the same, otherwise use exclusive (concurrent needs at least 2 distinct
@@ -127,7 +131,6 @@ pub unsafe fn create_swapchain(
         vk::SharingMode::EXCLUSIVE
     };
 
-    info!("Created swapchain");
 
     // fill out the swapchain creation structure
     let info = vk::SwapchainCreateInfoKHR::builder()
@@ -152,7 +155,11 @@ pub unsafe fn create_swapchain(
                                                   // don't do that here
 
     data.swapchain = device.create_swapchain_khr(&info, None)?;
+    info!("Created swapchain");
+
     data.swapchain_images = device.get_swapchain_images_khr(data.swapchain)?;
+    log::debug!("Created {} swapchain images", data.swapchain_images.len());
+
     data.swapchain_format = surface_format.format;
     data.swapchain_extent = extent;
 

@@ -1,9 +1,14 @@
 use anyhow::{anyhow, Result};
 use vulkanalia::prelude::v1_0::*;
 
+use log::info;
 use crate::app::AppData;
 
 pub unsafe fn create_command_buffers(device: &Device, data: &mut AppData) -> Result<()> {
+    debug_assert!(data.framebuffers.len() > 0);
+
+    log::debug!("Creating {} command buffers", data.framebuffers.len());
+
     // as drawing requires binding of the correct framebuffer, we create a command
     // buffer for each one
     let allocate_info = vk::CommandBufferAllocateInfo::builder()
@@ -79,6 +84,7 @@ pub unsafe fn create_command_buffers(device: &Device, data: &mut AppData) -> Res
         // finishing up
         device.cmd_end_render_pass(*command_buffer);
         device.end_command_buffer(*command_buffer)?;
+        info!("Created command buffer");
     }
 
     Ok(())
