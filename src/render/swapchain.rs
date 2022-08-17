@@ -131,7 +131,6 @@ pub unsafe fn create_swapchain(
         vk::SharingMode::EXCLUSIVE
     };
 
-
     // fill out the swapchain creation structure
     let info = vk::SwapchainCreateInfoKHR::builder()
         .surface(data.surface)
@@ -156,6 +155,7 @@ pub unsafe fn create_swapchain(
 
     data.swapchain = device.create_swapchain_khr(&info, None)?;
     info!("Created swapchain");
+    log::debug!("Swapchain extent: w: {}, h: {}", extent.width, extent.height);
 
     data.swapchain_images = device.get_swapchain_images_khr(data.swapchain)?;
     log::debug!("Created {} swapchain images", data.swapchain_images.len());

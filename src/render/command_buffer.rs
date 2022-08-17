@@ -84,7 +84,7 @@ pub unsafe fn create_command_buffers(device: &Device, data: &mut AppData) -> Res
         // finishing up
         device.cmd_end_render_pass(*command_buffer);
         device.end_command_buffer(*command_buffer)?;
-        info!("Created command buffer");
+        log::debug!("Created command buffer");
     }
 
     Ok(())

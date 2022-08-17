@@ -2,6 +2,7 @@
 #[allow(dead_code, unused_variables, unused_imports)]
 use anyhow::{anyhow, Result};
 
+use log::debug;
 use vulkanalia::loader::{LibloadingLoader, LIBRARY};
 use vulkanalia::prelude::v1_0::*;
 use vulkanalia::vk::{ExtDebugUtilsExtension, KhrSurfaceExtension, KhrSwapchainExtension};
@@ -20,6 +21,9 @@ use crate::render::validation;
 use crate::render::command_buffer;
 use crate::render::synchronization;
 
+use std::collections::VecDeque;
+use std::{thread, time};
+
 #[derive(Clone, Debug)]
 pub struct App {
     entry: Entry,
@@ -28,9 +32,15 @@ pub struct App {
     device: Device,
     // current frame index for multiple frames in flight
     frame: usize,
+    last_frame_end: time::Instant,
+    samples: VecDeque<u128>,
+    frame_counter: u32,
 }
 
 pub const MAX_FRAMES_IN_FLIGHT: usize = 2;
+pub const FRAME_SAMPLE_COUNT: usize = 20;
+pub const SLEEP_IN_RENDER: bool = true;
+pub const SLEEP_TIME_IN_MS: u32 = 16;
 
 #[derive(Clone, Debug, Default)]
 pub struct AppData {
@@ -114,7 +124,10 @@ impl App {
             instance,
             data,
             device,
-            frame: 0
+            frame: 0,
+            last_frame_end: time::Instant::now(),
+            samples: VecDeque::with_capacity(FRAME_SAMPLE_COUNT),
+            frame_counter: 0,
         })
     }
 
@@ -185,9 +198,30 @@ impl App {
             .image_indices(image_indices);
 
         self.device.queue_present_khr(self.data.present_queue, &present_info)?;
-
         self.frame = (self.frame + 1) % MAX_FRAMES_IN_FLIGHT;
 
+        // TODO: refactor
+        let now = time::Instant::now();
+        let time = now - self.last_frame_end;
+
+        self.last_frame_end = now;
+
+        self.samples.push_front(time.as_nanos());
+        if self.samples.len() >= FRAME_SAMPLE_COUNT {
+            self.samples.pop_back();
+        }
+
+        self.frame_counter = self.frame_counter + 1;
+        if self.frame_counter == FRAME_SAMPLE_COUNT as u32 {
+            let avg : u128 = self.samples.iter().sum::<u128>() / self.samples.len() as u128 / 1000;
+            let fps = 1_000_000 / avg;
+            log::info!("Avg frame time: {} us, fps: {}", avg, fps);
+            self.frame_counter = 0;
+        }
+
+        if SLEEP_IN_RENDER {
+            thread::sleep(time::Duration::from_millis(SLEEP_TIME_IN_MS.into()));
+        }
         Ok(())
     }
 
