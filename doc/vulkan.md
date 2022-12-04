@@ -129,3 +129,68 @@ possible and swap last image with the latest one (also known as 'triple bufferin
 we are drawing to)
 - some window manager allow for deviation of this (indicated by `current_extent` set
 to max value of u32)
+
+# Order of operations
+
+## initial setup
+
+- create window (with external library)
+- initialize vulkan instance 
+	- accesspoint for all other vulkan operations
+	- uses window to load required vulkan extensions
+	- setup debug utilities (validation layers) and debug callback
+- create window surface (abstraction layer between app and os-specific window 
+	access)
+
+## create logical device
+
+- pick a physical device, which conforms with required device properties 
+	(check DEVICE_EXTENSIONS)
+- create logical device (abstraction layer between app and physical device)
+	- specify, which validation layers, extensions and features are enabled in 
+		the logical device
+	- provides access to graphics_queue and present_queue (for presentation)
+	
+## create swapchain
+
+- swapchain contains the images, to which should be rendered in order to 
+	draw to the window surface
+- specify color space and format (how many bits for each color, etc.), presentation 
+	mode and extent (roughly speaking: image size)
+- specify which queue families (of the physical device) should be used
+- store the swapchain images in appdata after creation
+
+## create render pass
+
+- a render pass describes the data structures (attachments) and subpasses (which 
+	will use the attachments) and dependencies between subpasses
+- specify load and store operations for attachments (in AttachmentDescription)
+
+## create pipeline
+
+- create vertex and fragment shader modules and add them to stages
+- specify viewport and scissor dimensions
+- configure rasterizer
+- configure multisampling
+- specify color blend method and add it as attachement to the color blend stage
+- create pipeline object
+- destroy shader modules (no longer needed, if no extensive shader debuggin is 
+	needed)
+	
+## create swapchain image views
+
+- create a view into the images of the swapchain (needed in order to use the 
+	swapchain image)
+- specify, what the views purpose is (in subresource_range)
+
+## create framebuffers
+
+- bind the swapchain image views to an attachment (defined during render pass 
+	creation) by creating a framebuffer object
+	- references the render pass and the image view (as an attachement)
+	
+## create command pool
+
+- create command pool(s), which are used to allocate command buffers
+- specify the type of queue (by queue family index) to which the command buffers 
+	created from this pool will be submitted
