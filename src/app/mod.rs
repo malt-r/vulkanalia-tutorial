@@ -10,6 +10,7 @@ use vulkanalia::window as vk_window;
 
 use winit::window::Window;
 
+use crate::render::command_buffer;
 use crate::render::command_pool;
 use crate::render::device;
 use crate::render::framebuffer;
@@ -17,9 +18,8 @@ use crate::render::instance;
 use crate::render::pipeline;
 use crate::render::render_pass;
 use crate::render::swapchain;
-use crate::render::validation;
-use crate::render::command_buffer;
 use crate::render::synchronization;
+use crate::render::validation;
 
 use std::collections::VecDeque;
 use std::{thread, time};
@@ -35,11 +35,12 @@ pub struct App {
     last_frame_end: time::Instant,
     samples: VecDeque<u128>,
     frame_counter: u32,
+    sleep_in_render: bool,
 }
 
 pub const MAX_FRAMES_IN_FLIGHT: usize = 2;
 pub const FRAME_SAMPLE_COUNT: usize = 20;
-pub const SLEEP_IN_RENDER: bool = true;
+//pub const SLEEP_IN_RENDER: bool = true;
 pub const SLEEP_TIME_IN_MS: u32 = 16;
 
 #[derive(Clone, Debug, Default)]
@@ -119,6 +120,14 @@ impl App {
         command_buffer::create_command_buffers(&device, &mut data)?;
         synchronization::create_sync_objects(&device, &mut data)?;
 
+        let sleep = dotenv::var("SLEEP_IN_RENDER").unwrap();
+        println!("Sleep: {0}", sleep);
+
+        let sleep_bool = match sleep.as_str() {
+            "0" => false,
+            _ => true,
+        };
+
         Ok(Self {
             entry,
             instance,
@@ -128,6 +137,7 @@ impl App {
             last_frame_end: time::Instant::now(),
             samples: VecDeque::with_capacity(FRAME_SAMPLE_COUNT),
             frame_counter: 0,
+            sleep_in_render: sleep_bool,
         })
     }
 
@@ -137,7 +147,7 @@ impl App {
             &[self.data.in_flight_fences[self.frame]],
             true,
             u64::max_value(),
-            )?;
+        )?;
 
         // Each of the actions required for rendering is executed by calling
         // a single function, which executes asynchronously -> requires synchronization
@@ -153,8 +163,9 @@ impl App {
                 self.data.swapchain,
                 u64::max_value(),
                 self.data.image_ready_semaphores[self.frame],
-                vk::Fence::null()
-                )?.0 as usize;
+                vk::Fence::null(),
+            )?
+            .0 as usize;
 
         // TODO: verstehen
         if !self.data.images_in_flight[image_index].is_null() {
@@ -162,11 +173,10 @@ impl App {
                 &[self.data.images_in_flight[image_index]],
                 true,
                 u64::max_value(),
-                )?;
+            )?;
         }
 
-        self.data.images_in_flight[image_index] =
-            self.data.in_flight_fences[self.frame];
+        self.data.images_in_flight[image_index] = self.data.in_flight_fences[self.frame];
 
         let wait_semaphores = &[self.data.image_ready_semaphores[self.frame]];
         let command_buffers = &[self.data.command_buffers[image_index]];
@@ -176,17 +186,18 @@ impl App {
         let submit_info = vk::SubmitInfo::builder()
             .wait_semaphores(wait_semaphores) // for which semaphore to wait
             .wait_dst_stage_mask(wait_stages) // in which stage(s) of the pipeline should we wait?
-                                              // -> wait before the part of the pipeline, which
-                                              // writes color to the color attachment
+            // -> wait before the part of the pipeline, which
+            // writes color to the color attachment
             .command_buffers(command_buffers) // which command_buffers should be used?
             .signal_semaphores(signal_semaphores); // which semaphores should be signaled on finish
 
-        self.device.reset_fences(&[self.data.in_flight_fences[self.frame]])?;
-        self.device.queue_submit (
-                self.data.graphics_queue,
-                &[submit_info],
-                self.data.in_flight_fences[self.frame] // TODO: explain
-            )?;
+        self.device
+            .reset_fences(&[self.data.in_flight_fences[self.frame]])?;
+        self.device.queue_submit(
+            self.data.graphics_queue,
+            &[submit_info],
+            self.data.in_flight_fences[self.frame], // TODO: explain
+        )?;
 
         let swapchains = &[self.data.swapchain];
         let image_indices = &[image_index as u32];
@@ -197,7 +208,8 @@ impl App {
             .swapchains(swapchains)
             .image_indices(image_indices);
 
-        self.device.queue_present_khr(self.data.present_queue, &present_info)?;
+        self.device
+            .queue_present_khr(self.data.present_queue, &present_info)?;
         self.frame = (self.frame + 1) % MAX_FRAMES_IN_FLIGHT;
 
         // TODO: refactor
@@ -213,13 +225,13 @@ impl App {
 
         self.frame_counter = self.frame_counter + 1;
         if self.frame_counter == FRAME_SAMPLE_COUNT as u32 {
-            let avg : u128 = self.samples.iter().sum::<u128>() / self.samples.len() as u128 / 1000;
+            let avg: u128 = self.samples.iter().sum::<u128>() / self.samples.len() as u128 / 1000;
             let fps = 1_000_000 / avg;
             log::info!("Avg frame time: {} us, fps: {}", avg, fps);
             self.frame_counter = 0;
         }
 
-        if SLEEP_IN_RENDER {
+        if self.sleep_in_render {
             thread::sleep(time::Duration::from_millis(SLEEP_TIME_IN_MS.into()));
         }
         Ok(())
@@ -229,15 +241,18 @@ impl App {
     pub unsafe fn destroy(&mut self) {
         self.device.device_wait_idle().unwrap();
 
-        self.data.in_flight_fences
+        self.data
+            .in_flight_fences
             .iter()
             .for_each(|f| self.device.destroy_fence(*f, None));
 
-        self.data.render_finished_semaphores
+        self.data
+            .render_finished_semaphores
             .iter()
             .for_each(|s| self.device.destroy_semaphore(*s, None));
 
-        self.data.image_ready_semaphores
+        self.data
+            .image_ready_semaphores
             .iter()
             .for_each(|s| self.device.destroy_semaphore(*s, None));
 
