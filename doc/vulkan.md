@@ -194,3 +194,52 @@ to max value of u32)
 - create command pool(s), which are used to allocate command buffers
 - specify the type of queue (by queue family index) to which the command buffers 
 	created from this pool will be submitted
+	
+## create command buffer(s)
+
+- allocate a command buffer for each framebuffer (each framebuffer binds one 
+	swapchain image as an attachement)
+- begin recording of command buffer
+- begin render pass
+	- reference renderpass
+	- reference framebuffer
+	- specify render area
+	- specify clear values (the color, which should be used for clearing all pixels)
+- bind pipeline (tells vulkan, which attachements to use(?))
+- add draw command (currently the vertices are hard coded into the vertex shader)
+- end render pass
+- end command buffer
+
+## create synchronization objects
+
+- create semaphores; synchronization of rendering itself (for each image/frame in flight)
+	- image-ready semaphore
+	- render-finished semaphore
+- create fences; synchronization of rendering with app (how are these different?)
+	- in_flight_fences (for each image/frame in flight)
+	- images_in_flight (for each image/frame in flight) (initialized with fence::null)
+	- acquire_next_image might return swapchain images out of order from frames;
+		
+
+## render 
+
+- wait for fence of current frame
+- acquire next image (vulkan call) -> returns image index (index into the swapchain images)
+	- pass image-ready semaphore for the current frame
+- store fence from `in_flight_fences[frame_idx]` at the `images_in_flight[image_index]` 
+	- aquire_next_image_khr might return images out of order from the images_in_flight 
+		order and might return a frame_index of an image, which is already rendered at
+	- in order to avoid rendering to an image, which is already rendered at, we store 
+		the fence from in_flight_fences in the helper array images_in_flight (which 
+		stores the fences of the images !CURRENTLY IN FLIGHT!)
+- reset the fence of the frame
+- submit command buffer
+	- command buffer is tied to the swapchain image, therefore we need the corresponding 
+		command buffer for the `image_index`
+	- pass semaphore for which to wait
+	- pass the stage in which to wait for the wait-semaphore
+	- pass semaphore which to signal, when rendering is complete
+- present rendered image
+	- pass signal_semaphore
+	- pass reference to swapchain
+	- pass image_indices
