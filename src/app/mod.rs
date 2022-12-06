@@ -2,7 +2,6 @@
 #[allow(dead_code, unused_variables, unused_imports)]
 use anyhow::{anyhow, Result};
 
-use log::debug;
 use vulkanalia::loader::{LibloadingLoader, LIBRARY};
 use vulkanalia::prelude::v1_0::*;
 use vulkanalia::vk::{ExtDebugUtilsExtension, KhrSurfaceExtension, KhrSwapchainExtension};
@@ -29,9 +28,10 @@ pub struct App {
     entry: Entry,
     instance: Instance,
     data: AppData,
-    device: Device,
+    pub device: Device,
     // current frame index for multiple frames in flight
     frame: usize,
+    pub resized: bool,
     last_frame_end: time::Instant,
     samples: VecDeque<u128>,
     frame_counter: u32,
@@ -134,6 +134,7 @@ impl App {
             data,
             device,
             frame: 0,
+            resized: false,
             last_frame_end: time::Instant::now(),
             samples: VecDeque::with_capacity(FRAME_SAMPLE_COUNT),
             frame_counter: 0,
@@ -157,15 +158,21 @@ impl App {
         //   with rendering
         // - Semaphores: state can't be queried from program, used to synchronize
         //   rendering internally
-        let image_index = self
-            .device
-            .acquire_next_image_khr(
-                self.data.swapchain,
-                u64::max_value(),
-                self.data.image_ready_semaphores[self.frame],
-                vk::Fence::null(),
-            )?
-            .0 as usize;
+        let result = self.device.acquire_next_image_khr(
+            self.data.swapchain,
+            u64::max_value(),
+            self.data.image_ready_semaphores[self.frame],
+            vk::Fence::null(),
+        );
+
+        let image_index = match result {
+            Ok((image_index, _)) => image_index as usize,
+            Err(vk::ErrorCode::OUT_OF_DATE_KHR) => {
+                log::info!("Out of date khr, recreating swapchain");
+                return self.recreate_swapchain(window);
+            }
+            Err(e) => return Err(anyhow!(e)),
+        };
 
         // TODO: verstehen
         if !self.data.images_in_flight[image_index].is_null() {
@@ -209,8 +216,21 @@ impl App {
             .swapchains(swapchains)
             .image_indices(image_indices);
 
-        self.device
-            .queue_present_khr(self.data.present_queue, &present_info)?;
+        // recreate swapchain, if it changed
+        let result = self
+            .device
+            .queue_present_khr(self.data.present_queue, &present_info);
+
+        let changed = result == Ok(vk::SuccessCode::SUBOPTIMAL_KHR)
+            || result == Err(vk::ErrorCode::OUT_OF_DATE_KHR);
+
+        if self.resized || changed {
+            self.recreate_swapchain(window)?;
+            self.resized = false;
+        } else if let Err(e) = result {
+            return Err(anyhow!(e));
+        }
+
         self.frame = (self.frame + 1) % MAX_FRAMES_IN_FLIGHT;
 
         //
@@ -242,9 +262,30 @@ impl App {
         Ok(())
     }
 
+    pub unsafe fn recreate_swapchain(&mut self, window: &Window) -> Result<()> {
+        log::debug!("Recreating swapchain");
+
+        // wait for device to become idle
+        self.device.device_wait_idle()?;
+        self.destroy_swapchain();
+
+        swapchain::create_swapchain(window, &self.instance, &self.device, &mut self.data)?;
+        swapchain::create_swapchain_image_views(&self.device, &mut self.data)?;
+        render_pass::create_render_pass(&self.instance, &self.device, &mut self.data)?;
+        pipeline::create_pipeline(&self.device, &mut self.data)?;
+        framebuffer::create_framebuffers(&self.device, &mut self.data)?;
+        command_buffer::create_command_buffers(&self.device, &mut self.data)?;
+        self.data
+            .images_in_flight
+            .resize(self.data.swapchain_images.len(), vk::Fence::null());
+        Ok(())
+    }
+
     /// destroy the app
     pub unsafe fn destroy(&mut self) {
         self.device.device_wait_idle().unwrap();
+
+        self.destroy_swapchain();
 
         self.data
             .in_flight_fences
@@ -266,23 +307,6 @@ impl App {
         self.device
             .destroy_command_pool(self.data.command_pool, None);
 
-        self.data
-            .framebuffers
-            .iter()
-            .for_each(|f| self.device.destroy_framebuffer(*f, None));
-
-        self.device.destroy_pipeline(self.data.pipeline, None);
-
-        self.device
-            .destroy_pipeline_layout(self.data.pipeline_layout, None);
-        self.device.destroy_render_pass(self.data.render_pass, None);
-
-        self.data
-            .swapchain_image_views
-            .iter()
-            .for_each(|v| self.device.destroy_image_view(*v, None));
-
-        self.device.destroy_swapchain_khr(self.data.swapchain, None);
         // None is for allocation callbacks
         self.device.destroy_device(None);
 
@@ -296,5 +320,23 @@ impl App {
         self.instance.destroy_surface_khr(self.data.surface, None);
         // be explicit about it
         self.instance.destroy_instance(None);
+    }
+
+    unsafe fn destroy_swapchain(&self) {
+        self.data
+            .framebuffers
+            .iter()
+            .for_each(|f| self.device.destroy_framebuffer(*f, None));
+        self.device
+            .free_command_buffers(self.data.command_pool, &self.data.command_buffers);
+        self.device.destroy_pipeline(self.data.pipeline, None);
+        self.device
+            .destroy_pipeline_layout(self.data.pipeline_layout, None);
+        self.device.destroy_render_pass(self.data.render_pass, None);
+        self.data
+            .swapchain_image_views
+            .iter()
+            .for_each(|v| self.device.destroy_image_view(*v, None));
+        self.device.destroy_swapchain_khr(self.data.swapchain, None);
     }
 }

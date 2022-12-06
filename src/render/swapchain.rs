@@ -7,6 +7,7 @@ use vulkanalia::prelude::v1_0::*;
 use vulkanalia::vk::KhrSurfaceExtension;
 use vulkanalia::vk::KhrSwapchainExtension;
 
+use crate::app::App;
 use crate::app::AppData;
 use crate::render::queue::QueueFamilyIndices;
 use winit::window::Window;

@@ -24,6 +24,7 @@ fn main() -> anyhow::Result<()> {
 
     let mut app = unsafe { app::App::create(&window)? };
     let mut destroying = false;
+    let mut minimized = false;
     event_loop.run(move |event, _, control_flow| {
         // poll for events, even if none is available
         *control_flow = ControlFlow::Poll;
@@ -31,12 +32,22 @@ fn main() -> anyhow::Result<()> {
         match event {
             // render a new frame, if all events other than the RequestRequested have
             // been cleared
-            Event::MainEventsCleared if !destroying => unsafe { app.render(&window) }.unwrap(),
+            Event::MainEventsCleared if !destroying && !minimized => {
+                unsafe { app.render(&window) }.unwrap()
+            }
             Event::WindowEvent {
-                event: WindowEvent::Resized(..),
+                event: WindowEvent::Resized(size),
                 ..
             } => {
-                log::debug!("Resized!");
+                if size.width == 0 || size.height == 0 {
+                    log::info!("App was minimized");
+                    minimized = true;
+                } else {
+                    log::info!("App was resized");
+                    minimized = false;
+                    // handle resize explicitly
+                    app.resized = true;
+                }
             }
             // emitted, if the OS sends an event to the winit window (specifically
             // a request to close the window)

@@ -7,6 +7,8 @@ use vulkanalia::prelude::v1_0::*;
 use crate::app::AppData;
 
 pub unsafe fn create_pipeline(device: &Device, data: &mut AppData) -> Result<()> {
+    log::debug!("creating pipeline");
+
     let vert = include_bytes!("../../shaders/vert.spv");
     let frag = include_bytes!("../../shaders/frag.spv");
 
