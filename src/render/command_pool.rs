@@ -4,6 +4,9 @@ use vulkanalia::prelude::v1_0::*;
 use crate::app::AppData;
 use crate::render::queue;
 
+// TODO: create as many command pools as there are images in flight (and command
+// buffers) -> only one command buffer per command pool
+
 pub unsafe fn create_command_pool(
     instance: &Instance,
     device: &Device,

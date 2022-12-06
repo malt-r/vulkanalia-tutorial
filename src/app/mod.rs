@@ -193,6 +193,7 @@ impl App {
 
         self.device
             .reset_fences(&[self.data.in_flight_fences[self.frame]])?;
+
         self.device.queue_submit(
             self.data.graphics_queue,
             &[submit_info],
@@ -211,6 +212,10 @@ impl App {
         self.device
             .queue_present_khr(self.data.present_queue, &present_info)?;
         self.frame = (self.frame + 1) % MAX_FRAMES_IN_FLIGHT;
+
+        //
+        // --- fps counter ---
+        //
 
         // TODO: refactor
         let now = time::Instant::now();

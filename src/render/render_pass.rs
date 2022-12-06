@@ -47,6 +47,8 @@ pub unsafe fn create_render_pass(
 
     // --- define render pass ---
 
+    // definition of subpass dependency
+
     // TODO: understand this!
     // the layout transitions before and after the draw command are counted
     // as implicit "subpasses", therefore are relevant for subpass dependency
@@ -59,8 +61,11 @@ pub unsafe fn create_render_pass(
         // SUBPASS_EXTERNAL refers to the implicit subpass before or after
         // the render pass, depending on whether it is specified in src_subpass
         // or dst_subpass
-        .src_subpass(vk::SUBPASS_EXTERNAL) // on which subpass do we depend?
-        .dst_subpass(0) // refers to our subpass, which is the first and only one
+        //
+        // on which subpass do we depend?
+        .src_subpass(vk::SUBPASS_EXTERNAL)
+        // refers to our subpass, which is the first and only one
+        .dst_subpass(0)
         // define, operations to wait on and stage(s) in which these operations
         // occur -> we need to wait for swapchain to read from image -> wait
         // for color attachment output itself

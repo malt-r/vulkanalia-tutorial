@@ -1,8 +1,8 @@
 use anyhow::{anyhow, Result};
 use vulkanalia::prelude::v1_0::*;
 
-use log::info;
 use crate::app::AppData;
+use log::info;
 
 pub unsafe fn create_command_buffers(device: &Device, data: &mut AppData) -> Result<()> {
     debug_assert!(data.framebuffers.len() > 0);
@@ -23,7 +23,6 @@ pub unsafe fn create_command_buffers(device: &Device, data: &mut AppData) -> Res
     data.command_buffers = device.allocate_command_buffers(&allocate_info)?;
 
     // record command buffers
-
     for (i, command_buffer) in data.command_buffers.iter().enumerate() {
         // begin command buffer
         let inheritance = vk::CommandBufferInheritanceInfo::builder();
@@ -73,13 +72,13 @@ pub unsafe fn create_command_buffers(device: &Device, data: &mut AppData) -> Res
         );
 
         // draw
-        device.cmd_draw (
-                *command_buffer,
-                3, // vertex count
-                1, // instance count -> for instanced rendering
-                0, // vertex offset -> start at zeroth one
-                0  // instance offset
-            );
+        device.cmd_draw(
+            *command_buffer,
+            3, // vertex count
+            1, // instance count -> for instanced rendering
+            0, // vertex offset -> start at zeroth one
+            0, // instance offset
+        );
 
         // finishing up
         device.cmd_end_render_pass(*command_buffer);

@@ -115,8 +115,14 @@ pub unsafe fn create_swapchain(
         image_count = support.capabilities.max_image_count;
     }
 
-    debug!("max swapchain images: {:?}", support.capabilities.max_image_count);
-    debug_assert!(support.capabilities.max_image_count == 0 || image_count <= support.capabilities.max_image_count);
+    debug!(
+        "max swapchain images: {:?}",
+        support.capabilities.max_image_count
+    );
+    debug_assert!(
+        support.capabilities.max_image_count == 0
+            || image_count <= support.capabilities.max_image_count
+    );
 
     // define sharing mode for images, which are shared across multiple queue
     // families -> use concurrent mode, if graphics and presentation queue family
@@ -150,12 +156,17 @@ pub unsafe fn create_swapchain(
         .present_mode(present_mode)
         .clipped(true) // don't care about pixels, which are obscured by other windows -> better performance
         .old_swapchain(vk::SwapchainKHR::null()); // if swapchain gets invalidated
-                                                  // (on window resize) we need to recreate it and pass the old one, but we
+                                                  // (on window resize) we need
+                                                  // to recreate it and pass the old one, but we
                                                   // don't do that here
 
     data.swapchain = device.create_swapchain_khr(&info, None)?;
     info!("Created swapchain");
-    log::debug!("Swapchain extent: w: {}, h: {}", extent.width, extent.height);
+    log::debug!(
+        "Swapchain extent: w: {}, h: {}",
+        extent.width,
+        extent.height
+    );
 
     data.swapchain_images = device.get_swapchain_images_khr(data.swapchain)?;
     log::debug!("Created {} swapchain images", data.swapchain_images.len());

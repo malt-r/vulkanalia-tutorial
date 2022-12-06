@@ -32,6 +32,12 @@ fn main() -> anyhow::Result<()> {
             // render a new frame, if all events other than the RequestRequested have
             // been cleared
             Event::MainEventsCleared if !destroying => unsafe { app.render(&window) }.unwrap(),
+            Event::WindowEvent {
+                event: WindowEvent::Resized(..),
+                ..
+            } => {
+                log::debug!("Resized!");
+            }
             // emitted, if the OS sends an event to the winit window (specifically
             // a request to close the window)
             Event::WindowEvent {
@@ -41,7 +47,9 @@ fn main() -> anyhow::Result<()> {
                 destroying = true;
                 *control_flow = ControlFlow::Exit;
                 log::debug!("Exit...");
-                unsafe { app.destroy(); }
+                unsafe {
+                    app.destroy();
+                }
             }
             _ => {}
         }
