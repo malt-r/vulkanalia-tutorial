@@ -6,6 +6,81 @@ use vulkanalia::prelude::v1_0::*;
 
 use crate::app::AppData;
 
+// vertex data related
+// needed, because glm hat not yet const functions
+use lazy_static::lazy_static;
+
+// define the data
+use nalgebra_glm as glm;
+
+// used to calculate the size of vertex data
+use std::mem::size_of;
+
+// repr annotation states to use other memory layout strategies (C in this case)
+#[repr(C)]
+#[derive(Copy, Clone, Debug)]
+struct Vertex {
+    pos: glm::Vec2,
+    color: glm::Vec3,
+}
+
+impl Vertex {
+    fn new(pos: glm::Vec2, color: glm::Vec3) -> Self {
+        Self { pos, color }
+    }
+
+    // needed to tell vulkan, how to pass vertex data to the shader
+    // Vertex binding describes, at which rate to laod data from memory
+    // specifies number of bytes between data entries whether to move to next entry
+    // after each vertex or instance
+    fn binding_description() -> vk::VertexInputBindingDescription {
+        vk::VertexInputBindingDescription::builder()
+            // specifies the index of the binding in array of bindings
+            .binding(0)
+            // specifies the number of bytes from one entry to the next
+            .stride(size_of::<Vertex>() as u32)
+            // either vertex or instance (for instanced rendering)
+            .input_rate(vk::VertexInputRate::VERTEX)
+            .build()
+    }
+
+    // used to specify how to handle vertex input
+    fn attribute_descriptions() -> [vk::VertexInputAttributeDescription; 2] {
+        let pos = vk::VertexInputAttributeDescription::builder()
+            // from which binding does the per-vertex data come?
+            .binding(0)
+            // references the location directive of the attribute in shader code
+            .location(0)
+            // describes the type of data of the attribute (confusingly the same enum as color formats)
+            // in this case: vec2 has two 32 bit floats
+            // should also bitwidth of the datatypes
+            .format(vk::Format::R32G32_SFLOAT)
+            // number of bytes since the start of the per vertex data
+            .offset(0)
+            .build();
+
+        let color = vk::VertexInputAttributeDescription::builder()
+            .binding(0)
+            .location(1)
+            .format(v::Format::R32G32B32_SFLOAT)
+            .offset(size_of::<glm::Vec2>() as u32)
+            .build();
+
+        [pos, color]
+    }
+}
+
+// glm provied rust-types that exactly match shader vector types
+// combining position and color in one array (different attributes in one array)
+// is also known as INTERLEAVING ATTRIBUTES
+lazy_static! {
+    static ref VERTICES: Vec<Vertex> = vec![
+        Vertex::new(glm::vec2(0.0, -0.5), glm::vec3(1.0, 0.0, 0.0)),
+        Vertex::new(glm::vec2(0.5, 0.5), glm::vec3(0.0, 1.0, 0.0)),
+        Vertex::new(glm::vec2(-0.5, 0.5), glm::vec3(0.0, 0.0, 1.0)),
+    ];
+}
+
 pub unsafe fn create_pipeline(device: &Device, data: &mut AppData) -> Result<()> {
     log::debug!("creating pipeline");
 
@@ -32,10 +107,13 @@ pub unsafe fn create_pipeline(device: &Device, data: &mut AppData) -> Result<()>
 
     // --- FIXED FUNCTION STAGE CONFIGURATION ---
 
-    // this struct could store information about bindings and attribute descriptions
-    // the vertex_binding_descriptions and vertex_attribute_descriptions would
-    // take slices of structs describing this
-    let vertex_input_state = vk::PipelineVertexInputStateCreateInfo::builder();
+    // prepare pipeline to accept vertex data
+    let binding_descriptions = &[Vertex::binding_description()];
+    let attribute_descriptions = Vertex::attribute_descriptions();
+
+    let vertex_input_state = vk::PipelineVertexInputStateCreateInfo::builder()
+        .vertex_binding_descriptions(binding_descriptions)
+        .vertex_attribute_descriptions(&attribute_descriptions);
 
     // describe, which kind of geometry should be drawn from the vertex-data
     // and if 'primitive restart' should be enabled

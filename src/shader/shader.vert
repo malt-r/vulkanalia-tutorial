@@ -1,17 +1,13 @@
 #version 450
 
-vec2 positions[3] = vec2[] (
-	vec2(0.0, -0.5),
-	vec2(0.5, 0.5),
-	vec2(-0.5, 0.5)
-);
-
-// vertex colors
-vec3 colors[3] = vec3[](
-	vec3(1.0, 0.0, 0.0),
-	vec3(0.0, 1.0, 0.0),
-	vec3(0.0, 0.0, 1.0)
-);
+// these are vertex attributes, they are defined for each vertex
+// the location = x notation assigns indices to the inputs, so we can 
+// reference them
+// 
+// some types (dvec3) use multiple slots, this needs to be accounted for 
+// in this indexing
+layout(location = 0) in vec2 inPosition;
+layout(location = 1) in vec3 inColor;
 
 layout(location = 0) out vec3 fragColor;
 
