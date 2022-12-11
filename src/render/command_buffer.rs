@@ -71,9 +71,15 @@ pub unsafe fn create_command_buffers(device: &Device, data: &mut AppData) -> Res
             data.pipeline,
         );
 
+        // bind vertex buffer
+        device.cmd_bind_vertex_buffers(*command_buffer, 0, &[data.vertex_buffer], &[0]);
+
         // draw
         device.cmd_draw(
             *command_buffer,
+            // TODO: this needs to match the total vertex count.. as the whole
+            // vertex buffer thing will be encapsulated later in a struct anyway
+            // don't care right now
             3, // vertex count
             1, // instance count -> for instanced rendering
             0, // vertex offset -> start at zeroth one

@@ -88,6 +88,10 @@ pub struct AppData {
     // could be higher than the number of swapchain images, so we could end up
     // rendering to a swapchain image, that is already in flight
     pub images_in_flight: Vec<vk::Fence>,
+
+    // vertex input & buffer
+    pub vertex_buffer: vk::Buffer,
+    pub vertex_buffer_memory: vk::DeviceMemory,
 }
 
 // TODO: expose own safe wrapper around vulkan calls, which asserts the calling
@@ -117,6 +121,7 @@ impl App {
         swapchain::create_swapchain_image_views(&device, &mut data)?;
         framebuffer::create_framebuffers(&device, &mut data)?;
         command_pool::create_command_pool(&instance, &device, &mut data)?;
+        pipeline::create_vertex_buffer(&instance, &device, &mut data)?;
         command_buffer::create_command_buffers(&device, &mut data)?;
         synchronization::create_sync_objects(&device, &mut data)?;
 
@@ -286,6 +291,10 @@ impl App {
         self.device.device_wait_idle().unwrap();
 
         self.destroy_swapchain();
+
+        self.device.destroy_buffer(self.data.vertex_buffer, None);
+        self.device
+            .free_memory(self.data.vertex_buffer_memory, None);
 
         self.data
             .in_flight_fences

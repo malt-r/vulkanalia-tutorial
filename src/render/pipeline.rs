@@ -16,10 +16,13 @@ use nalgebra_glm as glm;
 // used to calculate the size of vertex data
 use std::mem::size_of;
 
+// memcpy
+use std::ptr::copy_nonoverlapping as memcpy;
+
 // repr annotation states to use other memory layout strategies (C in this case)
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
-struct Vertex {
+pub struct Vertex {
     pos: glm::Vec2,
     color: glm::Vec3,
 }
@@ -62,7 +65,7 @@ impl Vertex {
         let color = vk::VertexInputAttributeDescription::builder()
             .binding(0)
             .location(1)
-            .format(v::Format::R32G32B32_SFLOAT)
+            .format(vk::Format::R32G32B32_SFLOAT)
             .offset(size_of::<glm::Vec2>() as u32)
             .build();
 
@@ -75,10 +78,104 @@ impl Vertex {
 // is also known as INTERLEAVING ATTRIBUTES
 lazy_static! {
     static ref VERTICES: Vec<Vertex> = vec![
-        Vertex::new(glm::vec2(0.0, -0.5), glm::vec3(1.0, 0.0, 0.0)),
+        Vertex::new(glm::vec2(0.0, -0.5), glm::vec3(1.0, 1.0, 1.0)),
         Vertex::new(glm::vec2(0.5, 0.5), glm::vec3(0.0, 1.0, 0.0)),
         Vertex::new(glm::vec2(-0.5, 0.5), glm::vec3(0.0, 0.0, 1.0)),
     ];
+}
+
+// buffers are regions of memory used for storage of arbitraty data and can
+// be read by the graphics card
+// buffer allocation needs to be performed explicitly (they do not allocate memory
+// for themselves)
+pub unsafe fn create_vertex_buffer(
+    instance: &Instance,
+    device: &Device,
+    data: &mut AppData,
+) -> Result<()> {
+    let buffer_info = vk::BufferCreateInfo::builder()
+        .size((size_of::<Vertex>() * VERTICES.len()) as u64)
+        .usage(vk::BufferUsageFlags::VERTEX_BUFFER)
+        // the vertex buffer will only be used by the graphics queue, so we don't
+        // need to share it between queue families
+        .sharing_mode(vk::SharingMode::EXCLUSIVE);
+
+    data.vertex_buffer = device.create_buffer(&buffer_info, None)?;
+
+    // allocate buffer memory
+    let requirements = device.get_buffer_memory_requirements(data.vertex_buffer);
+
+    let memory_info = vk::MemoryAllocateInfo::builder()
+        .allocation_size(requirements.size)
+        .memory_type_index(get_memory_type_index(
+            instance,
+            data,
+            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+            requirements,
+        )?);
+    // allocate the buffer memory
+    data.vertex_buffer_memory = device.allocate_memory(&memory_info, None)?;
+
+    // bind the memory to the vertex buffer
+    device.bind_buffer_memory(
+        data.vertex_buffer,
+        data.vertex_buffer_memory,
+        0, // no offset
+    )?;
+
+    // fill the vertex buffer -> map cpu memory to the vertex_buffer_memory
+    let memory = device.map_memory(
+        data.vertex_buffer_memory,
+        0, // no offset
+        buffer_info.size,
+        vk::MemoryMapFlags::empty(),
+    )?;
+
+    // the driver may not copy the data immediately into the buffer memory
+    // two ways to deal with this:
+    // - use a memory heap that is host coherent (our approach)
+    // - call flush_mapped_memory_ranges after writing to memory and call
+    //   invalidate_mapped_memory_ranges before reading from mapped memory
+    // flushing memory ranges or using coherent memory ranges means, that the
+    // driver is aware of our changes, but it is not visible to the gpu yet;
+    // spec tells us, that the changes will be completed in the next call to
+    // queue_submit
+    memcpy(VERTICES.as_ptr(), memory.cast(), VERTICES.len());
+    device.unmap_memory(data.vertex_buffer_memory);
+
+    Ok(())
+}
+
+// graphics cards offer more than one kind of memory with different allowed operations
+// and performance characteristics; need to combine requirements for buffer and
+// application requirements to get the right memory_type_index
+unsafe fn get_memory_type_index(
+    instance: &Instance,
+    data: &AppData,
+    properties: vk::MemoryPropertyFlags,
+    requirements: vk::MemoryRequirements,
+) -> Result<u32> {
+    // query about available type of memory
+    // contains two arrays: memory_types and memory_heaps (distinct memory
+    // ressources - i.e. VRAM or swap space in RAM)
+    let memory = instance.get_physical_device_memory_properties(data.physical_device);
+
+    // memory_type_bits of requirements specify the types of memory, which are
+    // suitable
+    // the vk::MemoryType entries in the memory_types array specify properties
+    // (such as HOST_VISIBLE or HOST_COHERENT for memory which can be mapped to CPU
+    // memory) - we need to also check for these properties
+    //
+    // summary: if there is a memory_type which is suitable for the buffer and
+    //          also has all of the properties we need, we return it's index
+    (0..memory.memory_type_count)
+        .find(|i| {
+            // TODO: read about this in vk docs
+            let suitable = (requirements.memory_type_bits & (1 << i)) != 0;
+            let memory_type = memory.memory_types[*i as usize];
+            suitable && memory_type.property_flags.contains(properties)
+        })
+        .ok_or_else(|| anyhow!("Failed to find suitable memory type."))
 }
 
 pub unsafe fn create_pipeline(device: &Device, data: &mut AppData) -> Result<()> {
