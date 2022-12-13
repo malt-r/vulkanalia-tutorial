@@ -194,6 +194,22 @@ to max value of u32)
 - create command pool(s), which are used to allocate command buffers
 - specify the type of queue (by queue family index) to which the command buffers 
 	created from this pool will be submitted
+
+## create vertex buffer
+
+TODO
+
+- memory, that is used to upload vertex data from the CPU may not be the most optimal 
+	memory for the GPU to read from (that would be memory, which has the 
+	vk::MemoryPropertyFlags::DEVICE_LOCAL flag, but that is not accessible by the CPU
+	for writes, if the GPU is a dedicated device)
+- solution: create two vertex buffers, one staging buffer, which will be written to
+	by the CPU and the final vertex buffer in device local memory
+- this requires a buffer copy command, which in turn requires a queue family, which 
+	supports transfer operations (vk::QueueFlags::TRANSFER) - any queue with vk::QueueFlags::GRAPHICS or ::COMPUTE
+	implicityly supports ::TRANSFER operations
+	- this could be a chance to practice using different queue families (one specifically for 
+		transfer operations)
 	
 ## create command buffer(s)
 
