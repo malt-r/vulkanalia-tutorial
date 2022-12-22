@@ -36,6 +36,12 @@ pub unsafe fn create_buffer(
         )?);
 
     // allocate the buffer memory
+
+    // TODO: in a real scenario, we are not supposed to call allocate memory for
+    // each buffer separately, because these calls are limited to a relatively
+    // small amount; instead we should create a custom allocator, that splits
+    // up a single allocation among many differne objects by using the offset
+    // parameters, that we've seen in many functions
     let buffer_memory = device.allocate_memory(&memory_info, None)?;
 
     // bind the memory to the vertex buffer
@@ -45,6 +51,50 @@ pub unsafe fn create_buffer(
         0, // no offset
     )?;
     Ok((buffer, buffer_memory))
+}
+
+pub unsafe fn copy_buffer(
+    device: &Device,
+    data: &AppData,
+    source: vk::Buffer,
+    destination: vk::Buffer,
+    size: vk::DeviceSize,
+) -> Result<()> {
+    // memory transfer operations are executed using commmand buffers
+    // allocate temp command buffer
+    let info = vk::CommandBufferAllocateInfo::builder()
+        .level(vk::CommandBufferLevel::PRIMARY)
+        .command_pool(data.command_pool)
+        .command_buffer_count(1);
+    let command_buffer = device.allocate_command_buffers(&info)?[0];
+
+    // record command buffer, we will only use it once
+    let info =
+        vk::CommandBufferBeginInfo::builder().flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+    device.begin_command_buffer(command_buffer, &info)?;
+
+    // define regions to copy, defined in BufferCopy-struct, which is source buffer offset,
+    // destination buffer offset and size (we can't define vk::WHOLE_SIZE here..)
+    let regions = vk::BufferCopy::builder().size(size);
+    device.cmd_copy_buffer(command_buffer, source, destination, &[regions]);
+
+    // end recording
+    device.end_command_buffer(command_buffer)?;
+
+    // execute command buffer immediately
+    let command_buffers = &[command_buffer];
+    let info = vk::SubmitInfo::builder().command_buffers(command_buffers);
+
+    // submit on graphics queue (which implicitly supports transfer operations)
+    device.queue_submit(data.graphics_queue, &[info], vk::Fence::null())?;
+
+    // we could use wait_for_fences here to schedule multiple transfers simultaneously
+    // and wait for them to complete or just wait for the queue to idle
+    device.queue_wait_idle(data.graphics_queue)?;
+
+    device.free_command_buffers(data.command_pool, &[command_buffer]);
+
+    Ok(())
 }
 
 // graphics cards offer more than one kind of memory with different allowed operations

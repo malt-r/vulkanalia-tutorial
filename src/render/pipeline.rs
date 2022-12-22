@@ -96,25 +96,47 @@ pub unsafe fn create_vertex_buffer(
 ) -> Result<()> {
     let size = (size_of::<Vertex>() * VERTICES.len()) as u64;
 
+    // use staging buffer to store the vertex data and transfer it later to
+    // the actual vertex buffer
+    let (staging_buffer, staging_buffer_memory) = buffer::create_buffer(
+        instance,
+        device,
+        data,
+        size,
+        vk::BufferUsageFlags::TRANSFER_SRC, // buffer can be used as source in a memory transfer operation
+        vk::MemoryPropertyFlags::HOST_COHERENT | vk::MemoryPropertyFlags::HOST_VISIBLE,
+    )?;
+
+    // fill the staging buffer -> map cpu memory to the staging_buffer_memory
+    let memory = device.map_memory(
+        staging_buffer_memory,
+        0, // no offset
+        size,
+        vk::MemoryMapFlags::empty(),
+    )?;
+
+    memcpy(VERTICES.as_ptr(), memory.cast(), VERTICES.len());
+    device.unmap_memory(staging_buffer_memory);
+
+    // create a vertex buffer and memory in device_local memory
     let (vertex_buffer, vertex_buffer_memory) = buffer::create_buffer(
         instance,
         device,
         data,
         size,
-        vk::BufferUsageFlags::VERTEX_BUFFER,
-        vk::MemoryPropertyFlags::HOST_COHERENT | vk::MemoryPropertyFlags::HOST_VISIBLE,
+        vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::VERTEX_BUFFER,
+        vk::MemoryPropertyFlags::DEVICE_LOCAL,
     )?;
+
+    // copy from staging buffer to vertex buffer
+    buffer::copy_buffer(device, data, staging_buffer, vertex_buffer, size)?;
+
+    // release temporary resources
+    device.destroy_buffer(staging_buffer, None);
+    device.free_memory(staging_buffer_memory, None);
 
     data.vertex_buffer = vertex_buffer;
     data.vertex_buffer_memory = vertex_buffer_memory;
-
-    // fill the vertex buffer -> map cpu memory to the vertex_buffer_memory
-    let memory = device.map_memory(
-        vertex_buffer_memory,
-        0, // no offset
-        size,
-        vk::MemoryMapFlags::empty(),
-    )?;
 
     // the driver may not copy the data immediately into the buffer memory
     // two ways to deal with this:
@@ -125,8 +147,6 @@ pub unsafe fn create_vertex_buffer(
     // driver is aware of our changes, but it is not visible to the gpu yet;
     // spec tells us, that the changes will be completed in the next call to
     // queue_submit
-    memcpy(VERTICES.as_ptr(), memory.cast(), VERTICES.len());
-    device.unmap_memory(data.vertex_buffer_memory);
 
     Ok(())
 }
