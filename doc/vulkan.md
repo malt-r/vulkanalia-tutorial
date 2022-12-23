@@ -259,3 +259,17 @@ TODO
 	- pass signal_semaphore
 	- pass reference to swapchain
 	- pass image_indices
+
+## indexed rendering with vertex buffers
+
+From tutorial:
+The previous chapter already mentioned that you should allocate multiple resources
+like buffers from a single memory allocation, but in fact you should go a step 
+further. Driver developers recommend that you also store multiple buffers, like
+the vertex and index buffer, into a single vk::Buffer and use offsets in commands
+like cmd_bind_vertex_buffers. The advantage is that your data is more cache friendly
+in that case, because it's closer together. It is even possible to reuse the same 
+chunk of memory for multiple resources if they are not used during the same render
+operations, provided that their data is refreshed, of course. This is known as 
+aliasing and some Vulkan functions have explicit flags to specify that you want
+to do this.
