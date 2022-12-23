@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use vulkanalia::prelude::v1_0::*;
 
-use crate::app::AppData;
+use crate::{app::AppData, render::pipeline};
 use log::info;
 
 pub unsafe fn create_command_buffers(device: &Device, data: &mut AppData) -> Result<()> {
@@ -74,16 +74,20 @@ pub unsafe fn create_command_buffers(device: &Device, data: &mut AppData) -> Res
         // bind vertex buffer
         device.cmd_bind_vertex_buffers(*command_buffer, 0, &[data.vertex_buffer], &[0]);
 
-        // draw
-        device.cmd_draw(
+        // bind index buffer (you can only have one index buffer)
+        device.cmd_bind_index_buffer(*command_buffer, data.index_buffer, 0, vk::IndexType::UINT16);
+
+        // draw (indexed)
+        device.cmd_draw_indexed(
             *command_buffer,
             // TODO: this needs to match the total vertex count.. as the whole
             // vertex buffer thing will be encapsulated later in a struct anyway
             // don't care right now
-            3, // vertex count
-            1, // instance count -> for instanced rendering
-            0, // vertex offset -> start at zeroth one
-            0, // instance offset
+            pipeline::INDICES.len() as u32, // index count
+            1,                              // instance count
+            0,                              // first index
+            0,                              // vertex offset -> start at zeroth one
+            0,                              // first instance
         );
 
         // finishing up

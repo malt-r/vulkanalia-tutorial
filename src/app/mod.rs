@@ -92,6 +92,9 @@ pub struct AppData {
     // vertex input & buffer
     pub vertex_buffer: vk::Buffer,
     pub vertex_buffer_memory: vk::DeviceMemory,
+
+    pub index_buffer: vk::Buffer,
+    pub index_buffer_memory: vk::DeviceMemory,
 }
 
 // TODO: expose own safe wrapper around vulkan calls, which asserts the calling
@@ -122,6 +125,7 @@ impl App {
         framebuffer::create_framebuffers(&device, &mut data)?;
         command_pool::create_command_pool(&instance, &device, &mut data)?;
         pipeline::create_vertex_buffer(&instance, &device, &mut data)?;
+        pipeline::create_index_buffer(&instance, &device, &mut data)?;
         command_buffer::create_command_buffers(&device, &mut data)?;
         synchronization::create_sync_objects(&device, &mut data)?;
 
@@ -291,6 +295,9 @@ impl App {
         self.device.device_wait_idle().unwrap();
 
         self.destroy_swapchain();
+
+        self.device.destroy_buffer(self.data.index_buffer, None);
+        self.device.free_memory(self.data.index_buffer_memory, None);
 
         self.device.destroy_buffer(self.data.vertex_buffer, None);
         self.device

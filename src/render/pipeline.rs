@@ -77,13 +77,26 @@ impl Vertex {
 // glm provied rust-types that exactly match shader vector types
 // combining position and color in one array (different attributes in one array)
 // is also known as INTERLEAVING ATTRIBUTES
-lazy_static! {
+/*lazy_static! {
     static ref VERTICES: Vec<Vertex> = vec![
         Vertex::new(glm::vec2(0.0, -0.5), glm::vec3(1.0, 1.0, 1.0)),
         Vertex::new(glm::vec2(0.5, 0.5), glm::vec3(0.0, 1.0, 0.0)),
         Vertex::new(glm::vec2(-0.5, 0.5), glm::vec3(0.0, 0.0, 1.0)),
     ];
+}*/
+
+lazy_static! {
+    static ref VERTICES: Vec<Vertex> = vec![
+        Vertex::new(glm::vec2(-0.5, -0.5), glm::vec3(1.0, 0.0, 0.0)),
+        Vertex::new(glm::vec2(0.5, -0.5), glm::vec3(0.0, 1.0, 0.0)),
+        Vertex::new(glm::vec2(0.5, 0.5), glm::vec3(0.0, 0.0, 1.0)),
+        Vertex::new(glm::vec2(-0.5, 0.5), glm::vec3(1.0, 1.0, 1.0)),
+    ];
 }
+
+// indices for drawing two triangles with vertex data
+// this also needs to be uploaded into an vk::Buffer
+pub const INDICES: &[u16] = &[0, 1, 2, 2, 3, 0];
 
 // buffers are regions of memory used for storage of arbitraty data and can
 // be read by the graphics card
@@ -147,6 +160,60 @@ pub unsafe fn create_vertex_buffer(
     // driver is aware of our changes, but it is not visible to the gpu yet;
     // spec tells us, that the changes will be completed in the next call to
     // queue_submit
+
+    Ok(())
+}
+
+pub unsafe fn create_index_buffer(
+    instance: &Instance,
+    device: &Device,
+    data: &mut AppData,
+) -> Result<()> {
+    let size = (size_of::<u16>() * INDICES.len()) as u64;
+
+    log::debug!("Index buffer size: {}", size);
+
+    // use staging buffer to store the vertex data and transfer it later to
+    // the actual vertex buffer
+    let (staging_buffer, staging_buffer_memory) = buffer::create_buffer(
+        instance,
+        device,
+        data,
+        size,
+        vk::BufferUsageFlags::TRANSFER_SRC, // buffer can be used as source in a memory transfer operation
+        vk::MemoryPropertyFlags::HOST_COHERENT | vk::MemoryPropertyFlags::HOST_VISIBLE,
+    )?;
+
+    // fill the staging buffer -> map cpu memory to the staging_buffer_memory
+    let memory = device.map_memory(
+        staging_buffer_memory,
+        0, // no offset
+        size,
+        vk::MemoryMapFlags::empty(),
+    )?;
+
+    memcpy(INDICES.as_ptr(), memory.cast(), INDICES.len());
+    device.unmap_memory(staging_buffer_memory);
+
+    // create an index buffer and memory in device_local memory
+    let (index_buffer, index_buffer_memory) = buffer::create_buffer(
+        instance,
+        device,
+        data,
+        size,
+        vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::INDEX_BUFFER,
+        vk::MemoryPropertyFlags::DEVICE_LOCAL,
+    )?;
+
+    data.index_buffer = index_buffer;
+    data.index_buffer_memory = index_buffer_memory;
+
+    // copy from staging buffer to vertex buffer
+    buffer::copy_buffer(device, data, staging_buffer, index_buffer, size)?;
+
+    // release temporary resources
+    device.destroy_buffer(staging_buffer, None);
+    device.free_memory(staging_buffer_memory, None);
 
     Ok(())
 }
