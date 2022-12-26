@@ -345,9 +345,11 @@ pub unsafe fn create_pipeline(device: &Device, data: &mut AppData) -> Result<()>
     // could specify dynamic state here, which allows for configuration of specific parameters
     // on draw-time -> causes the configuration at compile time to be ignored!!
 
+    // reference descriptor set layouts used in the pipeline
+    let set_layouts = &[data.descriptor_set_layout];
     // specify pipeline layout (could be used to pass uniforms or push-constants (i.e. arguments) to shader stages)
     // even though, we don't use this right now, we need to create an empty pipeline layout
-    let layout_info = vk::PipelineLayoutCreateInfo::builder();
+    let layout_info = vk::PipelineLayoutCreateInfo::builder().set_layouts(set_layouts);
 
     data.pipeline_layout = device.create_pipeline_layout(&layout_info, None)?;
 

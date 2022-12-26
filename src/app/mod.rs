@@ -69,6 +69,7 @@ pub struct AppData {
     pub swapchain_image_views: Vec<vk::ImageView>,
 
     pub render_pass: vk::RenderPass,
+    pub descriptor_set_layout: vk::DescriptorSetLayout,
     pub pipeline_layout: vk::PipelineLayout,
 
     pub pipeline: vk::Pipeline,
@@ -295,6 +296,9 @@ impl App {
         self.device.device_wait_idle().unwrap();
 
         self.destroy_swapchain();
+
+        self.device
+            .destroy_descriptor_set_layout(self.data.descriptor_set_layout, None);
 
         self.device.destroy_buffer(self.data.index_buffer, None);
         self.device.free_memory(self.data.index_buffer_memory, None);

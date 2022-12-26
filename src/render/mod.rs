@@ -1,6 +1,7 @@
 pub(crate) mod buffer;
 pub(crate) mod command_buffer;
 pub(crate) mod command_pool;
+pub(crate) mod descriptor_set;
 pub(crate) mod device;
 pub(crate) mod framebuffer;
 pub(crate) mod instance;
