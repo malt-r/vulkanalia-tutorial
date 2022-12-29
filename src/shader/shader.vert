@@ -2,6 +2,14 @@
 
 // will be updated every frame to make things spin
 // similar to the location directive for attributes
+// 
+// it is possible to bind multiple descriptor sets simultaneously;
+// for each one a descriptor layout needs to be defined
+// in a shader, we could reference different descriptor sets like this
+// `layout(set = 0, binding = 0)...``
+// -> useful to put descriptors, which vary per object and descriptors, which 
+// stay the same for every object in different sets (more efficient, than 
+// rebinding all descriptor sets across all draw calls)
 layout(binding = 0) uniform UniformBufferObject {
 	mat4 model;
 	mat4 view;

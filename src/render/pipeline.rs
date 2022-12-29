@@ -4,7 +4,7 @@ use anyhow::{anyhow, Result};
 use log::info;
 use vulkanalia::prelude::v1_0::*;
 
-use super::buffer;
+use super::{buffer, descriptor_set};
 use crate::app::AppData;
 
 // vertex data related
@@ -218,6 +218,38 @@ pub unsafe fn create_index_buffer(
     Ok(())
 }
 
+pub unsafe fn create_uniform_buffers(
+    instance: &Instance,
+    device: &Device,
+    data: &mut AppData,
+) -> Result<()> {
+    data.uniform_buffers.clear();
+    data.uniform_buffers_memory.clear();
+
+    // we will update the uniform buffers contents each frame; as we have multiple
+    // frames in flight, we could either create one uniform buffer for each frame
+    // or for each swapchain image; the uniform buffer is refered to by the command
+    // buffer (which is per swapchain image), so we create one uniform buffer for
+    // each swapchain image as well
+    for _ in 0..data.swapchain_images.len() {
+        let (uniform_buffer, uniform_buffer_memory) = buffer::create_buffer(
+            instance,
+            device,
+            data,
+            size_of::<descriptor_set::UniformBufferObject>() as u64,
+            vk::BufferUsageFlags::UNIFORM_BUFFER,
+            vk::MemoryPropertyFlags::HOST_COHERENT | vk::MemoryPropertyFlags::HOST_VISIBLE,
+        )?;
+        data.uniform_buffers.push(uniform_buffer);
+        data.uniform_buffers_memory.push(uniform_buffer_memory);
+
+        // we will create a specific function, which updates the buffer with
+        // new data every frame, so there is no need for map_memory here
+    }
+
+    Ok(())
+}
+
 pub unsafe fn create_pipeline(device: &Device, data: &mut AppData) -> Result<()> {
     log::debug!("creating pipeline");
 
@@ -294,7 +326,10 @@ pub unsafe fn create_pipeline(device: &Device, data: &mut AppData) -> Result<()>
         // requires GPU feature)-> fill area of polygon with fragments
         .line_width(1.0) // describe thickness of lines in terms of fragments (> 1 req. 'wide_lines' GPU feature)
         .cull_mode(vk::CullModeFlags::BACK)
-        .front_face(vk::FrontFace::CLOCKWISE) // specify vertex order for faces to consider front-facing
+        .front_face(vk::FrontFace::COUNTER_CLOCKWISE) // specify vertex order for faces to consider front-facing;
+        // because of the y-sign flip, we did in the update_uniform_buffers (to update the
+        // model view proj matrix, vertices are drawn in counter-clockwise direction,
+        // which needs to be reflected here)
         .depth_bias_enable(false); // could offset depth value based on slope of fragment, sometime used in shadowmapping
 
     // --- multisampling configuration ---

@@ -77,6 +77,16 @@ pub unsafe fn create_command_buffers(device: &Device, data: &mut AppData) -> Res
         // bind index buffer (you can only have one index buffer)
         device.cmd_bind_index_buffer(*command_buffer, data.index_buffer, 0, vk::IndexType::UINT16);
 
+        // bind descriptor set for each swapchain image
+        device.cmd_bind_descriptor_sets(
+            *command_buffer,
+            vk::PipelineBindPoint::GRAPHICS,
+            data.pipeline_layout,
+            0,
+            &[data.descriptor_sets[i]],
+            &[],
+        );
+
         // draw (indexed)
         device.cmd_draw_indexed(
             *command_buffer,

@@ -9,8 +9,8 @@ use vulkanalia::window as vk_window;
 
 use winit::window::Window;
 
-use crate::render::command_buffer;
-use crate::render::command_pool;
+use nalgebra_glm as glm;
+
 use crate::render::device;
 use crate::render::framebuffer;
 use crate::render::instance;
@@ -19,6 +19,10 @@ use crate::render::render_pass;
 use crate::render::swapchain;
 use crate::render::synchronization;
 use crate::render::validation;
+use crate::render::{command_buffer, descriptor_set};
+use crate::render::{command_pool, descriptor_pool};
+use std::mem::size_of;
+use std::ptr::copy_nonoverlapping as memcpy;
 
 use std::collections::VecDeque;
 use std::{thread, time};
@@ -36,6 +40,7 @@ pub struct App {
     samples: VecDeque<u128>,
     frame_counter: u32,
     sleep_in_render: bool,
+    start: time::Instant,
 }
 
 pub const MAX_FRAMES_IN_FLIGHT: usize = 2;
@@ -96,6 +101,11 @@ pub struct AppData {
 
     pub index_buffer: vk::Buffer,
     pub index_buffer_memory: vk::DeviceMemory,
+
+    pub uniform_buffers: Vec<vk::Buffer>,
+    pub uniform_buffers_memory: Vec<vk::DeviceMemory>,
+    pub descriptor_pool: vk::DescriptorPool,
+    pub descriptor_sets: Vec<vk::DescriptorSet>,
 }
 
 // TODO: expose own safe wrapper around vulkan calls, which asserts the calling
@@ -121,12 +131,16 @@ impl App {
 
         swapchain::create_swapchain(window, &instance, &device, &mut data)?;
         render_pass::create_render_pass(&instance, &device, &mut data)?;
+        descriptor_set::create_descriptor_set_layout(&device, &mut data)?;
         pipeline::create_pipeline(&device, &mut data)?;
         swapchain::create_swapchain_image_views(&device, &mut data)?;
         framebuffer::create_framebuffers(&device, &mut data)?;
         command_pool::create_command_pool(&instance, &device, &mut data)?;
         pipeline::create_vertex_buffer(&instance, &device, &mut data)?;
         pipeline::create_index_buffer(&instance, &device, &mut data)?;
+        pipeline::create_uniform_buffers(&instance, &device, &mut data)?;
+        descriptor_pool::create_descriptor_pool(&device, &mut data)?;
+        descriptor_set::create_descriptor_sets(&device, &mut data)?;
         command_buffer::create_command_buffers(&device, &mut data)?;
         synchronization::create_sync_objects(&device, &mut data)?;
 
@@ -146,6 +160,7 @@ impl App {
             frame: 0,
             resized: false,
             last_frame_end: time::Instant::now(),
+            start: time::Instant::now(),
             samples: VecDeque::with_capacity(FRAME_SAMPLE_COUNT),
             frame_counter: 0,
             sleep_in_render: sleep_bool,
@@ -194,6 +209,12 @@ impl App {
         }
 
         self.data.images_in_flight[image_index] = self.data.in_flight_fences[self.frame];
+
+        // it is important, that the uniform buffer is not updated, before
+        // the fence is signaled; we need to be sure, that any previously
+        // rendered frame to the acquired swapchain image is completed, before
+        // savely updating the data in the uniform buffer
+        self.update_uniform_buffer(image_index)?;
 
         let wait_semaphores = &[self.data.image_ready_semaphores[self.frame]];
         let command_buffers = &[self.data.command_buffers[image_index]];
@@ -272,6 +293,58 @@ impl App {
         Ok(())
     }
 
+    unsafe fn update_uniform_buffer(&self, image_index: usize) -> Result<()> {
+        let time = self.start.elapsed().as_secs_f32();
+        // define model view projection transformations in the ubo
+
+        // model rotation will be around the z-axis using time
+        // rotate 90 degrees per second
+        let model = glm::rotate(
+            &glm::identity(),                         // existing transformation
+            time * glm::radians(&glm::vec1(90.0))[0], // rotation angle
+            &glm::vec3(0.0, 0.0, 1.0),                // rotation axis
+        );
+
+        // look at geometry from aboce at 45 degree angle
+        let view = glm::look_at(
+            &glm::vec3(2.0, 2.0, 2.0), // position of the camera
+            &glm::vec3(0.0, 0.0, 0.0), // where to look at
+            &glm::vec3(0.0, 0.0, 1.0), // where is up
+        );
+
+        //
+        let mut proj = glm::perspective(
+            self.data.swapchain_extent.width as f32 / self.data.swapchain_extent.height as f32, // aspect ratio
+            glm::radians(&glm::vec1(45.0))[0], // fov
+            0.1,                               // near plane
+            10.0,                              // far plane
+        );
+
+        // GLM was originally designed for OpenGL, where the Y coord of the clip
+        // coordinated is inverted; easiest way to compensate, is to flip sign on
+        // the scaling factor of the Y axis in the projection matrix; if we don't
+        // do this, the image will be rendered upside down
+        proj[(1, 1)] *= -1.0;
+        let ubo = descriptor_set::UniformBufferObject { model, view, proj };
+
+        // update uniform buffer memory
+        let memory = self.device.map_memory(
+            self.data.uniform_buffers_memory[image_index],
+            0,
+            size_of::<descriptor_set::UniformBufferObject>() as u64,
+            vk::MemoryMapFlags::empty(),
+        )?;
+
+        memcpy(&ubo, memory.cast(), 1);
+
+        // updating the ubo in this way is not the most efficient way to update
+        // data in shaders frequently (that would be a push constant for small data)
+        self.device
+            .unmap_memory(self.data.uniform_buffers_memory[image_index]);
+
+        Ok(())
+    }
+
     pub unsafe fn recreate_swapchain(&mut self, window: &Window) -> Result<()> {
         log::debug!("Recreating swapchain");
 
@@ -284,6 +357,9 @@ impl App {
         render_pass::create_render_pass(&self.instance, &self.device, &mut self.data)?;
         pipeline::create_pipeline(&self.device, &mut self.data)?;
         framebuffer::create_framebuffers(&self.device, &mut self.data)?;
+        pipeline::create_uniform_buffers(&self.instance, &self.device, &mut self.data)?;
+        descriptor_pool::create_descriptor_pool(&self.device, &mut self.data)?;
+        descriptor_set::create_descriptor_sets(&self.device, &mut self.data)?;
         command_buffer::create_command_buffers(&self.device, &mut self.data)?;
         self.data
             .images_in_flight
@@ -343,6 +419,18 @@ impl App {
     }
 
     unsafe fn destroy_swapchain(&self) {
+        self.device
+            .destroy_descriptor_pool(self.data.descriptor_pool, None);
+
+        self.data
+            .uniform_buffers
+            .iter()
+            .for_each(|b| self.device.destroy_buffer(*b, None));
+        self.data
+            .uniform_buffers_memory
+            .iter()
+            .for_each(|m| self.device.free_memory(*m, None));
+
         self.data
             .framebuffers
             .iter()
