@@ -11,7 +11,6 @@ use winit::window::Window;
 
 use nalgebra_glm as glm;
 
-use crate::render::device;
 use crate::render::framebuffer;
 use crate::render::instance;
 use crate::render::pipeline;
@@ -21,6 +20,7 @@ use crate::render::synchronization;
 use crate::render::validation;
 use crate::render::{command_buffer, descriptor_set};
 use crate::render::{command_pool, descriptor_pool};
+use crate::render::{device, image};
 use std::mem::size_of;
 use std::ptr::copy_nonoverlapping as memcpy;
 
@@ -107,6 +107,9 @@ pub struct AppData {
     pub uniform_buffers_memory: Vec<vk::DeviceMemory>,
     pub descriptor_pool: vk::DescriptorPool,
     pub descriptor_sets: Vec<vk::DescriptorSet>,
+
+    pub texture_image: vk::Image,
+    pub texture_image_memory: vk::DeviceMemory,
 }
 
 // TODO: expose own safe wrapper around vulkan calls, which asserts the calling
@@ -137,6 +140,7 @@ impl App {
         swapchain::create_swapchain_image_views(&device, &mut data)?;
         framebuffer::create_framebuffers(&device, &mut data)?;
         command_pool::create_command_pool(&instance, &device, &mut data)?;
+        image::create_texture_image(&instance, &device, &mut data)?;
         pipeline::create_vertex_buffer(&instance, &device, &mut data)?;
         pipeline::create_index_buffer(&instance, &device, &mut data)?;
         pipeline::create_uniform_buffers(&instance, &device, &mut data)?;

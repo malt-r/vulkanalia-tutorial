@@ -5,6 +5,7 @@ pub(crate) mod descriptor_pool;
 pub(crate) mod descriptor_set;
 pub(crate) mod device;
 pub(crate) mod framebuffer;
+pub(crate) mod image;
 pub(crate) mod instance;
 pub(crate) mod pipeline;
 mod queue;
