@@ -40,6 +40,7 @@ pub struct App {
     samples: VecDeque<u128>,
     frame_counter: u32,
     sleep_in_render: bool,
+    count_fps: bool,
     start: time::Instant,
 }
 
@@ -152,6 +153,14 @@ impl App {
             _ => true,
         };
 
+        let fps = dotenv::var("FPS_COUNTER").unwrap();
+        println!("fps counter: {0}", fps);
+
+        let fps_bool = match fps.as_str() {
+            "0" => false,
+            _ => true,
+        };
+
         Ok(Self {
             entry,
             instance,
@@ -164,6 +173,7 @@ impl App {
             samples: VecDeque::with_capacity(FRAME_SAMPLE_COUNT),
             frame_counter: 0,
             sleep_in_render: sleep_bool,
+            count_fps: fps_bool,
         })
     }
 
@@ -269,26 +279,29 @@ impl App {
         //
 
         // TODO: refactor
-        let now = time::Instant::now();
-        let time = now - self.last_frame_end;
+        if self.count_fps {
+            let now = time::Instant::now();
+            let time = now - self.last_frame_end;
 
-        self.last_frame_end = now;
+            self.last_frame_end = now;
 
-        self.samples.push_front(time.as_nanos());
-        if self.samples.len() >= FRAME_SAMPLE_COUNT {
-            self.samples.pop_back();
-        }
+            self.samples.push_front(time.as_nanos());
+            if self.samples.len() >= FRAME_SAMPLE_COUNT {
+                self.samples.pop_back();
+            }
 
-        self.frame_counter = self.frame_counter + 1;
-        if self.frame_counter == FRAME_SAMPLE_COUNT as u32 {
-            let avg: u128 = self.samples.iter().sum::<u128>() / self.samples.len() as u128 / 1000;
-            let fps = 1_000_000 / avg;
-            log::info!("Avg frame time: {} us, fps: {}", avg, fps);
-            self.frame_counter = 0;
-        }
+            self.frame_counter = self.frame_counter + 1;
+            if self.frame_counter == FRAME_SAMPLE_COUNT as u32 {
+                let avg: u128 =
+                    self.samples.iter().sum::<u128>() / self.samples.len() as u128 / 1000;
+                let fps = 1_000_000 / avg;
+                log::info!("Avg frame time: {} us, fps: {}", avg, fps);
+                self.frame_counter = 0;
+            }
 
-        if self.sleep_in_render {
-            thread::sleep(time::Duration::from_millis(SLEEP_TIME_IN_MS.into()));
+            if self.sleep_in_render {
+                thread::sleep(time::Duration::from_millis(SLEEP_TIME_IN_MS.into()));
+            }
         }
         Ok(())
     }
