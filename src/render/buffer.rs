@@ -6,6 +6,8 @@ use vulkanalia::prelude::v1_0::*;
 
 use crate::app::AppData;
 
+use super::command_buffer::{begin_single_time_commands, end_single_time_commands};
+
 pub unsafe fn create_buffer(
     instance: &Instance,
     device: &Device,
@@ -62,16 +64,7 @@ pub unsafe fn copy_buffer(
 ) -> Result<()> {
     // memory transfer operations are executed using commmand buffers
     // allocate temp command buffer
-    let info = vk::CommandBufferAllocateInfo::builder()
-        .level(vk::CommandBufferLevel::PRIMARY)
-        .command_pool(data.command_pool)
-        .command_buffer_count(1);
-    let command_buffer = device.allocate_command_buffers(&info)?[0];
-
-    // record command buffer, we will only use it once
-    let info =
-        vk::CommandBufferBeginInfo::builder().flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
-    device.begin_command_buffer(command_buffer, &info)?;
+    let command_buffer = begin_single_time_commands(device, data)?;
 
     // define regions to copy, defined in BufferCopy-struct, which is source buffer offset,
     // destination buffer offset and size (we can't define vk::WHOLE_SIZE here..)
@@ -79,20 +72,7 @@ pub unsafe fn copy_buffer(
     device.cmd_copy_buffer(command_buffer, source, destination, &[regions]);
 
     // end recording
-    device.end_command_buffer(command_buffer)?;
-
-    // execute command buffer immediately
-    let command_buffers = &[command_buffer];
-    let info = vk::SubmitInfo::builder().command_buffers(command_buffers);
-
-    // submit on graphics queue (which implicitly supports transfer operations)
-    device.queue_submit(data.graphics_queue, &[info], vk::Fence::null())?;
-
-    // we could use wait_for_fences here to schedule multiple transfers simultaneously
-    // and wait for them to complete or just wait for the queue to idle
-    device.queue_wait_idle(data.graphics_queue)?;
-
-    device.free_command_buffers(data.command_pool, &[command_buffer]);
+    end_single_time_commands(device, data, command_buffer)?;
 
     Ok(())
 }
@@ -100,7 +80,7 @@ pub unsafe fn copy_buffer(
 // graphics cards offer more than one kind of memory with different allowed operations
 // and performance characteristics; need to combine requirements for buffer and
 // application requirements to get the right memory_type_index
-unsafe fn get_memory_type_index(
+pub unsafe fn get_memory_type_index(
     instance: &Instance,
     data: &AppData,
     properties: vk::MemoryPropertyFlags,
