@@ -388,6 +388,10 @@ impl App {
     pub unsafe fn destroy(&mut self) {
         self.device.device_wait_idle().unwrap();
 
+        self.device.destroy_image(self.data.texture_image, None);
+        self.device
+            .free_memory(self.data.texture_image_memory, None);
+
         self.destroy_swapchain();
 
         self.device

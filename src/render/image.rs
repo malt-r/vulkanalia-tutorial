@@ -13,6 +13,14 @@ use crate::{
 
 use super::command_buffer;
 
+// TODO: all helper methods that submit command buffers do that synchronously,
+// by waiting for the queue to become idle; practical applications should combine
+// these operations in a single command buffer and execute them asynchronously for
+// higher throughput
+// -> setup_command_buffer, that the helper functions record commands into and add a
+//    flush_setup_commands, to execute the commands that have been recorded so far
+//    It's best to do this after the texture mapping works to check if the texture
+//    resources are still set up correctly
 pub unsafe fn create_texture_image(
     instance: &Instance,
     device: &Device,
@@ -71,6 +79,40 @@ pub unsafe fn create_texture_image(
     data.texture_image = texture_image;
     data.texture_image_memory = texture_image_memory;
 
+    // transition the texture image to vk::ImageLayout::TRANSFER_DST_OPTIMAL
+    transition_image_layout(
+        device,
+        data,
+        data.texture_image,
+        vk::Format::R8G8B8A8_SRGB,
+        vk::ImageLayout::UNDEFINED, // image was defined with this layout, so we should pass it as the old layout
+        vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+    )?;
+
+    // execute the buffer to image copy operation
+    copy_buffer_to_image(
+        device,
+        data,
+        staging_buffer,
+        data.texture_image,
+        width,
+        height,
+    )?;
+
+    // to be able to start sampling from the image, we need to transition it to prepare for shader access
+    transition_image_layout(
+        device,
+        data,
+        data.texture_image,
+        vk::Format::R8G8B8A8_SRGB,
+        vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+        vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+    )?;
+
+    // cleanup
+    device.destroy_buffer(staging_buffer, None);
+    device.free_memory(staging_buffer_memory, None);
+
     Ok(())
 }
 
@@ -120,6 +162,10 @@ pub unsafe fn create_image(
     Ok((image, image_memory))
 }
 
+//  TODO: besser verstehen
+// need to handle two transitions:
+// - undefined -> transfer destination (transfer writes, that don't need to wait on anything)
+// - transfer destination -> shader reading (shader reads should wait on transfer writes, specifically the shader reads in the fragment shader)
 unsafe fn transition_image_layout(
     device: &Device,
     data: &AppData,
@@ -128,6 +174,25 @@ unsafe fn transition_image_layout(
     old_layout: vk::ImageLayout,
     new_layout: vk::ImageLayout,
 ) -> Result<()> {
+    // Note: check this table for reference: https://registry.khronos.org/vulkan/specs/1.0/html/vkspec.html#synchronization-access-types-supported
+    // TODO: what is the differnece between access masks and stage masks
+    let (src_access_mask, dst_access_mask, src_stage_mask, dst_stage_mask) =
+        match (old_layout, new_layout) {
+            (vk::ImageLayout::UNDEFINED, vk::ImageLayout::TRANSFER_DST_OPTIMAL) => (
+                vk::AccessFlags::empty(),
+                vk::AccessFlags::TRANSFER_WRITE, // transfer writes must occur in the pipeline transfer stage
+                vk::PipelineStageFlags::TOP_OF_PIPE, // the writes don't have to wait on anything, so specify earliest possible stage TOP_OF_PIPE
+                vk::PipelineStageFlags::TRANSFER,
+            ),
+            (vk::ImageLayout::TRANSFER_DST_OPTIMAL, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL) => (
+                vk::AccessFlags::TRANSFER_WRITE,
+                vk::AccessFlags::SHADER_READ,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::PipelineStageFlags::FRAGMENT_SHADER,
+            ),
+            _ => return Err(anyhow!("Unsupported image layout transition!")),
+        };
+
     let command_buffer = command_buffer::begin_single_time_commands(device, data)?;
 
     // one of the most common ways to perform layout transitions is using an image
@@ -141,7 +206,7 @@ unsafe fn transition_image_layout(
         .base_mip_level(0)
         .level_count(1)
         .base_array_layer(0)
-        .layer_count(0);
+        .layer_count(1);
 
     let barrier = vk::ImageMemoryBarrier::builder()
         .old_layout(old_layout)
@@ -150,14 +215,14 @@ unsafe fn transition_image_layout(
         .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
         .image(image) // specify the image, that is affected
         .subresource_range(subresource) // specify the specific part of the image, that is affected
-        .src_access_mask(vk::AccessFlags::empty()) // TODO: which operations must happen before this barrier
-        .dst_access_mask(vk::AccessFlags::empty()); // TODO: which operations must wait for the barrier
+        .src_access_mask(src_access_mask)
+        .dst_access_mask(dst_access_mask);
 
     // all types of pipline barriers as submitted using this function
     device.cmd_pipeline_barrier(
         command_buffer,
-        vk::PipelineStageFlags::empty(), // TODO: in which pipeline stage do the operations occur, which must be performed before the barrier
-        vk::PipelineStageFlags::empty(), // TODO: in which pipeline stage do the operations occur, which must wait for this barrier
+        src_stage_mask,
+        dst_stage_mask,
         vk::DependencyFlags::empty(),
         &[] as &[vk::MemoryBarrier],
         &[] as &[vk::BufferMemoryBarrier],
@@ -166,5 +231,46 @@ unsafe fn transition_image_layout(
 
     command_buffer::end_single_time_commands(device, data, command_buffer)?;
 
+    Ok(())
+}
+
+pub unsafe fn copy_buffer_to_image(
+    device: &Device,
+    data: &AppData,
+    buffer: vk::Buffer,
+    image: vk::Image,
+    width: u32,
+    height: u32,
+) -> Result<()> {
+    let command_buffer = command_buffer::begin_single_time_commands(device, data)?;
+
+    // specify, which parts of the buffer are going to be copied to which parts of the image
+    let subresource = vk::ImageSubresourceLayers::builder()
+        .aspect_mask(vk::ImageAspectFlags::COLOR)
+        .mip_level(0)
+        .base_array_layer(0)
+        .layer_count(1);
+
+    let region = vk::BufferImageCopy::builder()
+        .buffer_offset(0) // byte offset in the buffer, at which pixel values start
+        .buffer_row_length(0) // row_length and image_height specify, how pixels are laid out in memory (could have some padding bytes; 0 signals, that pixels are tightly packed)
+        .buffer_image_height(0)
+        .image_subresource(subresource)
+        .image_offset(vk::Offset3D { x: 0, y: 0, z: 0 })
+        .image_extent(vk::Extent3D {
+            width,
+            height,
+            depth: 1,
+        });
+
+    device.cmd_copy_buffer_to_image(
+        command_buffer,
+        buffer,
+        image,
+        vk::ImageLayout::TRANSFER_DST_OPTIMAL, // indicates, which layout the image is currently using
+        &[region], // it's possible to specify an array of vk::BufferImageCopy to perform many different copies from this buffer to the image in one operation
+    );
+
+    command_buffer::end_single_time_commands(device, data, command_buffer)?;
     Ok(())
 }
