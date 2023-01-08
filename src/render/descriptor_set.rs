@@ -31,7 +31,13 @@ pub unsafe fn create_descriptor_set_layout(device: &Device, data: &mut AppData) 
         .descriptor_count(1) // it is possible for a shader variable to represent an array of uniform buffer objects (number specified by this count) -> could be used to specify transform for each bone in skeletal animation
         .stage_flags(vk::ShaderStageFlags::VERTEX); // in which stage of the graphics pipeline
 
-    let bindings = &[ubo_binding];
+    let sampler_binding = vk::DescriptorSetLayoutBinding::builder()
+        .binding(1) // reference to vertex shader
+        .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+        .descriptor_count(1) // it is possible for a shader variable to represent an array of uniform buffer objects (number specified by this count) -> could be used to specify transform for each bone in skeletal animation
+        .stage_flags(vk::ShaderStageFlags::FRAGMENT); // in which stage of the graphics pipeline
+
+    let bindings = &[ubo_binding, sampler_binding];
     let info = vk::DescriptorSetLayoutCreateInfo::builder().bindings(bindings);
 
     data.descriptor_set_layout = device.create_descriptor_set_layout(&info, None)?;
@@ -70,8 +76,22 @@ pub unsafe fn create_descriptor_sets(device: &Device, data: &mut AppData) -> Res
             .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
             .buffer_info(buffer_info); // for descriptors, which refer to image data, this would be 'image_info'
 
+        // bind image and sampler resources to descriptors in the descriptor set
+        let info = vk::DescriptorImageInfo::builder()
+            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .image_view(data.texture_image_view)
+            .sampler(data.texture_sampler);
+
+        let image_info = &[info];
+        let sampler_write = vk::WriteDescriptorSet::builder()
+            .dst_set(data.descriptor_sets[i])
+            .dst_binding(1)
+            .dst_array_element(0)
+            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .image_info(image_info);
+
         // actually update the descriptor set
-        device.update_descriptor_sets(&[ubo_write], &[] as &[vk::CopyDescriptorSet]);
+        device.update_descriptor_sets(&[ubo_write, sampler_write], &[] as &[vk::CopyDescriptorSet]);
     }
 
     Ok(())

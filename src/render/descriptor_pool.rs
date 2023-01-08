@@ -15,7 +15,12 @@ pub unsafe fn create_descriptor_pool(device: &Device, data: &mut AppData) -> Res
         .type_(vk::DescriptorType::UNIFORM_BUFFER)
         .descriptor_count(data.swapchain_images.len() as u32);
 
-    let pool_sizes = &[ubo_size];
+    let sampler_size = vk::DescriptorPoolSize::builder()
+        .type_(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+        .descriptor_count(data.swapchain_images.len() as u32);
+
+    // inadequate desriptor pools won't be caught by validation layers
+    let pool_sizes = &[ubo_size, sampler_size];
     let info = vk::DescriptorPoolCreateInfo::builder()
         .pool_sizes(pool_sizes)
         .max_sets(data.swapchain_images.len() as u32);
