@@ -111,6 +111,8 @@ pub struct AppData {
     pub texture_image: vk::Image,
     pub texture_image_memory: vk::DeviceMemory,
     pub texture_image_view: vk::ImageView,
+
+    pub texture_sampler: vk::Sampler,
 }
 
 // TODO: expose own safe wrapper around vulkan calls, which asserts the calling
@@ -143,6 +145,7 @@ impl App {
         command_pool::create_command_pool(&instance, &device, &mut data)?;
         image::create_texture_image(&instance, &device, &mut data)?;
         image::create_texture_image_view(&device, &mut data)?;
+        image::create_texture_sampler(&device, &mut data)?;
         pipeline::create_vertex_buffer(&instance, &device, &mut data)?;
         pipeline::create_index_buffer(&instance, &device, &mut data)?;
         pipeline::create_uniform_buffers(&instance, &device, &mut data)?;
@@ -389,6 +392,8 @@ impl App {
     /// destroy the app
     pub unsafe fn destroy(&mut self) {
         self.device.device_wait_idle().unwrap();
+
+        self.device.destroy_sampler(self.data.texture_sampler, None);
 
         self.device
             .destroy_image_view(self.data.texture_image_view, None);

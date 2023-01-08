@@ -321,3 +321,25 @@ pub(crate) unsafe fn create_texture_image_view(device: &Device, data: &mut AppDa
         create_image_view(device, data.texture_image, vk::Format::R8G8B8A8_SRGB)?;
     Ok(())
 }
+
+// Note: a sampler does not reference an image directly, but it can be applied to
+// any image, we want
+pub unsafe fn create_texture_sampler(device: &Device, data: &mut AppData) -> Result<()> {
+    let info = vk::SamplerCreateInfo::builder()
+        .mag_filter(vk::Filter::LINEAR) // how to interpolate texels that are magnified (oversampling)
+        .min_filter(vk::Filter::LINEAR) // how to interpolate texels that are minified (undersampling)
+        .address_mode_u(vk::SamplerAddressMode::REPEAT) // address mode for x (in texel space this is u)
+        .address_mode_v(vk::SamplerAddressMode::REPEAT) // address mode for y (in texel space this is v)
+        .address_mode_w(vk::SamplerAddressMode::REPEAT) // address mode for z (in texel space this is w)
+        .anisotropy_enable(true) // TODO: yeah, but what IS anisotropy exactly?
+        .max_anisotropy(16.0)
+        .border_color(vk::BorderColor::INT_OPAQUE_BLACK)
+        .unnormalized_coordinates(false) // if set to true, we can adress texels in [0, width) range, if normalized, then [0, 1)
+        .compare_enable(false) // if comparison function is enabled, texels will first be compared to a value and the result of that comp is used in filtering operations
+        .compare_op(vk::CompareOp::ALWAYS)
+        .mipmap_mode(vk::SamplerMipmapMode::LINEAR) // TODO: look at that later
+        .mip_lod_bias(0.0)
+        .min_lod(0.0)
+        .max_lod(0.0);
+    Ok(())
+}

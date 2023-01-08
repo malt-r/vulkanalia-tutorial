@@ -44,6 +44,12 @@ unsafe fn check_physical_device(
     if sc_support.formats.is_empty() || sc_support.present_modes.is_empty() {
         return Err(anyhow!(SuitabilityError("Insufficient swapchain support.")));
     }
+
+    let features = instance.get_physical_device_features(physical_device);
+    if features.sampler_anisotropy != vk::TRUE {
+        return Err(anyhow!(SuitabilityError("No sampler anisotropy.")));
+    }
+
     Ok(())
 }
 
@@ -102,7 +108,7 @@ pub unsafe fn create_logical_device(instance: &Instance, data: &mut AppData) -> 
 
     // specify used device features (queried for in check_physical_device)
     // TODO: nothing special required for now, specify later
-    let features = vk::PhysicalDeviceFeatures::builder();
+    let features = vk::PhysicalDeviceFeatures::builder().sampler_anisotropy(true);
 
     // convert device_extension Strings to null terminated strings
     let extensions = DEVICE_EXTENSIONS
