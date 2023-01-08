@@ -313,3 +313,11 @@ reads from it, does not mean, that B "sees" the changes a made (because of cachi
 Therefore we should specify, which operations are performed by A and B, so that 
 the driver knows, that the changes made by A need to be flushed to main memory and 
 not just stored in the cache.
+
+## Samplers
+
+- shaders can read texels directly from images, but this is very uncommon to do
+- usually samplers are used for this (which apply filtering automatically to compute 
+	the final texel color retrieved by the shader)
+- samplers also take care of transformations, which define, what happens, if reading 
+	texels outside of the image (clamp to edge, repeat, clamp to border, etc.)
