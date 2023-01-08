@@ -273,3 +273,43 @@ chunk of memory for multiple resources if they are not used during the same rend
 operations, provided that their data is refreshed, of course. This is known as 
 aliasing and some Vulkan functions have explicit flags to specify that you want
 to do this.
+
+## image layout transitions
+
+- Images must be stored in different layouts for different operations (Transfer_DST_Optimal, Shader_Read_Only_Optimal, etc.)
+- One of the most common ways to do layout transitions is image memory barrier 
+	(which is a pipeline barrier)
+	- pipeline barrier like that is used to synchronize access to resources
+
+## pipeline barriers
+
+see:  https://gpuopen.com/learn/vulkan-barriers-explained/
+
+GPU is a highly pipelined device. Commands come in at top, go through stages and 
+end up at bottom.
+
+"Source" and "Target" Stages in context of a barrier: Producer and Consumer stages of 
+the pipeline. By specifying these, we tell the driver, what operations need to 
+finish before the "transition" can execute and what must not have been started (target).
+
+Example from website:
+"Imagine you have a vertex shader that also stores data via an imageStore and a 
+compute shader that wants to consume it. In this case you wouldn’t want to wait
+for a subsequent fragment shader to finish as this can take a long time to complete.
+You really want the compute shader to start as soon as the vertex shader is done. 
+The way to express this is to set the source stage -the producer- to VERTEX_SHADER_BIT
+and the target stage -the consumer- to COMPUTE_SHADER_BIT "
+
+## access mask and pipeline stage flags 
+
+see: https://www.reddit.com/r/vulkan/comments/muo5ud/comment/gv8kzxi/?utm_source=share&utm_medium=web2x&context=3
+
+Stage flags specify execution order (which operations must be performed before 
+and can start after).
+
+The AccessMasks are related to memory/caching and specify, how resources are accessed 
+by an operation. Even though SubPass A (source) writes to a memory location and B (target)
+reads from it, does not mean, that B "sees" the changes a made (because of caching).
+Therefore we should specify, which operations are performed by A and B, so that 
+the driver knows, that the changes made by A need to be flushed to main memory and 
+not just stored in the cache.
