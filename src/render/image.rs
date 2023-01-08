@@ -341,5 +341,7 @@ pub unsafe fn create_texture_sampler(device: &Device, data: &mut AppData) -> Res
         .mip_lod_bias(0.0)
         .min_lod(0.0)
         .max_lod(0.0);
+
+    data.texture_sampler = device.create_sampler(&info, None)?;
     Ok(())
 }

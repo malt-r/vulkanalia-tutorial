@@ -26,11 +26,16 @@ use std::ptr::copy_nonoverlapping as memcpy;
 pub struct Vertex {
     pos: glm::Vec2,
     color: glm::Vec3,
+    tex_coord: glm::Vec2,
 }
 
 impl Vertex {
-    fn new(pos: glm::Vec2, color: glm::Vec3) -> Self {
-        Self { pos, color }
+    fn new(pos: glm::Vec2, color: glm::Vec3, tex_coord: glm::Vec2) -> Self {
+        Self {
+            pos,
+            color,
+            tex_coord,
+        }
     }
 
     // needed to tell vulkan, how to pass vertex data to the shader
@@ -49,7 +54,7 @@ impl Vertex {
     }
 
     // used to specify how to handle vertex input
-    fn attribute_descriptions() -> [vk::VertexInputAttributeDescription; 2] {
+    fn attribute_descriptions() -> [vk::VertexInputAttributeDescription; 3] {
         let pos = vk::VertexInputAttributeDescription::builder()
             // from which binding does the per-vertex data come?
             .binding(0)
@@ -70,7 +75,14 @@ impl Vertex {
             .offset(size_of::<glm::Vec2>() as u32)
             .build();
 
-        [pos, color]
+        let tex_coord = vk::VertexInputAttributeDescription::builder()
+            .binding(0)
+            .location(2)
+            .format(vk::Format::R32G32_SFLOAT)
+            .offset((size_of::<glm::Vec2>() + size_of::<glm::Vec3>()) as u32)
+            .build();
+
+        [pos, color, tex_coord]
     }
 }
 
@@ -87,10 +99,26 @@ impl Vertex {
 
 lazy_static! {
     static ref VERTICES: Vec<Vertex> = vec![
-        Vertex::new(glm::vec2(-0.5, -0.5), glm::vec3(1.0, 0.0, 0.0)),
-        Vertex::new(glm::vec2(0.5, -0.5), glm::vec3(0.0, 1.0, 0.0)),
-        Vertex::new(glm::vec2(0.5, 0.5), glm::vec3(0.0, 0.0, 1.0)),
-        Vertex::new(glm::vec2(-0.5, 0.5), glm::vec3(1.0, 1.0, 1.0)),
+        Vertex::new(
+            glm::vec2(-0.5, -0.5),
+            glm::vec3(1.0, 0.0, 0.0),
+            glm::vec2(1.0, 0.0)
+        ),
+        Vertex::new(
+            glm::vec2(0.5, -0.5),
+            glm::vec3(0.0, 1.0, 0.0),
+            glm::vec2(0.0, 0.0)
+        ),
+        Vertex::new(
+            glm::vec2(0.5, 0.5),
+            glm::vec3(0.0, 0.0, 1.0),
+            glm::vec2(0.0, 1.0)
+        ),
+        Vertex::new(
+            glm::vec2(-0.5, 0.5),
+            glm::vec3(1.0, 1.0, 1.0),
+            glm::vec2(1.0, 1.0)
+        ),
     ];
 }
 
