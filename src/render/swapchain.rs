@@ -12,6 +12,8 @@ use crate::app::AppData;
 use crate::render::queue::QueueFamilyIndices;
 use winit::window::Window;
 
+use super::image;
+
 #[derive(Clone, Debug)]
 pub struct SwapchainSupport {
     pub capabilities: vk::SurfaceCapabilitiesKHR,
@@ -192,25 +194,12 @@ pub unsafe fn create_swapchain_image_views(device: &Device, data: &mut AppData) 
                 .b(vk::ComponentSwizzle::IDENTITY)
                 .a(vk::ComponentSwizzle::IDENTITY);
 
-            // define subresource range -> describe purpose and which parts of
-            // image should be accessed
-            // we use the images as color targets and don't use mipmaps or multiple layers
-            let subresource_range = vk::ImageSubresourceRange::builder()
-                .aspect_mask(vk::ImageAspectFlags::COLOR)
-                .base_mip_level(0)
-                .level_count(1)
-                .base_array_layer(0)
-                .layer_count(1);
-
-            // create image view create info..
-            let info = vk::ImageViewCreateInfo::builder()
-                .image(*i)
-                .view_type(vk::ImageViewType::_2D) // specifies, how the image data should be interpreted, allows to treat images as 1D, 2D, 3D and cube maps
-                .format(data.swapchain_format)
-                .components(components)
-                .subresource_range(subresource_range);
-
-            device.create_image_view(&info, None)
+            image::create_image_view_with_components(
+                device,
+                *i,
+                data.swapchain_format,
+                components.build(),
+            )
         })
         .collect::<Result<Vec<_>, _>>()?;
 

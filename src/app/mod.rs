@@ -110,6 +110,7 @@ pub struct AppData {
 
     pub texture_image: vk::Image,
     pub texture_image_memory: vk::DeviceMemory,
+    pub texture_image_view: vk::ImageView,
 }
 
 // TODO: expose own safe wrapper around vulkan calls, which asserts the calling
@@ -141,6 +142,7 @@ impl App {
         framebuffer::create_framebuffers(&device, &mut data)?;
         command_pool::create_command_pool(&instance, &device, &mut data)?;
         image::create_texture_image(&instance, &device, &mut data)?;
+        image::create_texture_image_view(&device, &mut data)?;
         pipeline::create_vertex_buffer(&instance, &device, &mut data)?;
         pipeline::create_index_buffer(&instance, &device, &mut data)?;
         pipeline::create_uniform_buffers(&instance, &device, &mut data)?;
@@ -388,6 +390,8 @@ impl App {
     pub unsafe fn destroy(&mut self) {
         self.device.device_wait_idle().unwrap();
 
+        self.device
+            .destroy_image_view(self.data.texture_image_view, None);
         self.device.destroy_image(self.data.texture_image, None);
         self.device
             .free_memory(self.data.texture_image_memory, None);

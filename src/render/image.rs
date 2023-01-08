@@ -274,3 +274,50 @@ pub unsafe fn copy_buffer_to_image(
     command_buffer::end_single_time_commands(device, data, command_buffer)?;
     Ok(())
 }
+
+pub(crate) unsafe fn create_image_view(
+    device: &Device,
+    image: vk::Image,
+    format: vk::Format,
+) -> Result<vk::ImageView> {
+    let components = vk::ComponentMapping::builder()
+        .r(vk::ComponentSwizzle::IDENTITY)
+        .g(vk::ComponentSwizzle::IDENTITY)
+        .b(vk::ComponentSwizzle::IDENTITY)
+        .a(vk::ComponentSwizzle::IDENTITY);
+
+    create_image_view_with_components(device, image, format, components.build())
+}
+
+pub(crate) unsafe fn create_image_view_with_components(
+    device: &Device,
+    image: vk::Image,
+    format: vk::Format,
+    components: vk::ComponentMapping,
+) -> Result<vk::ImageView> {
+    // define subresource range -> describe purpose and which parts of
+    // image should be accessed
+    // we use the images as color targets and don't use mipmaps or multiple layers
+    let subresource_range = vk::ImageSubresourceRange::builder()
+        .aspect_mask(vk::ImageAspectFlags::COLOR)
+        .base_mip_level(0)
+        .level_count(1)
+        .base_array_layer(0)
+        .layer_count(1);
+
+    // create image view create info..
+    let info = vk::ImageViewCreateInfo::builder()
+        .image(image)
+        .view_type(vk::ImageViewType::_2D) // specifies, how the image data should be interpreted, allows to treat images as 1D, 2D, 3D and cube maps
+        .format(format)
+        .subresource_range(subresource_range)
+        .components(components);
+
+    Ok(device.create_image_view(&info, None)?)
+}
+
+pub(crate) unsafe fn create_texture_image_view(device: &Device, data: &mut AppData) -> Result<()> {
+    data.texture_image_view =
+        create_image_view(device, data.texture_image, vk::Format::R8G8B8A8_SRGB)?;
+    Ok(())
+}
