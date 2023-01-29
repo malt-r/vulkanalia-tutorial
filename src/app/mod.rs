@@ -113,6 +113,11 @@ pub struct AppData {
     pub texture_image_view: vk::ImageView,
 
     pub texture_sampler: vk::Sampler,
+
+    // depth buffering is also image based
+    pub depth_image: vk::Image,
+    pub depth_image_memory: vk::DeviceMemory,
+    pub depth_image_view: vk::ImageView,
 }
 
 // TODO: expose own safe wrapper around vulkan calls, which asserts the calling
@@ -143,6 +148,7 @@ impl App {
         swapchain::create_swapchain_image_views(&device, &mut data)?;
         framebuffer::create_framebuffers(&device, &mut data)?;
         command_pool::create_command_pool(&instance, &device, &mut data)?;
+        image::create_depth_objects(&instance, &device, &mut data)?;
         image::create_texture_image(&instance, &device, &mut data)?;
         image::create_texture_image_view(&device, &mut data)?;
         image::create_texture_sampler(&device, &mut data)?;
@@ -334,8 +340,9 @@ impl App {
             &glm::vec3(0.0, 0.0, 1.0), // where is up
         );
 
-        //
-        let mut proj = glm::perspective(
+        // we want to use the Vulkan depth range of 0.0 to 1.0 (and not the OpenGL
+        // depth range of -1.0 to 1.0); zo = zero-to-one
+        let mut proj = glm::perspective_rh_zo(
             self.data.swapchain_extent.width as f32 / self.data.swapchain_extent.height as f32, // aspect ratio
             glm::radians(&glm::vec1(45.0))[0], // fov
             0.1,                               // near plane

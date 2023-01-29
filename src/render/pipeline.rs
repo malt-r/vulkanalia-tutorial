@@ -24,13 +24,13 @@ use std::ptr::copy_nonoverlapping as memcpy;
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct Vertex {
-    pos: glm::Vec2,
+    pos: glm::Vec3,
     color: glm::Vec3,
     tex_coord: glm::Vec2,
 }
 
 impl Vertex {
-    fn new(pos: glm::Vec2, color: glm::Vec3, tex_coord: glm::Vec2) -> Self {
+    fn new(pos: glm::Vec3, color: glm::Vec3, tex_coord: glm::Vec2) -> Self {
         Self {
             pos,
             color,
@@ -61,9 +61,9 @@ impl Vertex {
             // references the location directive of the attribute in shader code
             .location(0)
             // describes the type of data of the attribute (confusingly the same enum as color formats)
-            // in this case: vec2 has two 32 bit floats
-            // should also bitwidth of the datatypes
-            .format(vk::Format::R32G32_SFLOAT)
+            // in this case: vec3 has three 32 bit floats
+            // should also consider bitwidth of the datatypes
+            .format(vk::Format::R32G32B32_SFLOAT)
             // number of bytes since the start of the per vertex data
             .offset(0)
             .build();
@@ -100,22 +100,42 @@ impl Vertex {
 lazy_static! {
     static ref VERTICES: Vec<Vertex> = vec![
         Vertex::new(
-            glm::vec2(-0.5, -0.5),
+            glm::vec3(-0.5, -0.5, 0.0),
             glm::vec3(1.0, 0.0, 0.0),
             glm::vec2(1.0, 0.0)
         ),
         Vertex::new(
-            glm::vec2(0.5, -0.5),
+            glm::vec3(0.5, -0.5, 0.0),
             glm::vec3(0.0, 1.0, 0.0),
             glm::vec2(0.0, 0.0)
         ),
         Vertex::new(
-            glm::vec2(0.5, 0.5),
+            glm::vec3(0.5, 0.5, 0.0),
             glm::vec3(0.0, 0.0, 1.0),
             glm::vec2(0.0, 1.0)
         ),
         Vertex::new(
-            glm::vec2(-0.5, 0.5),
+            glm::vec3(-0.5, 0.5, 0.0),
+            glm::vec3(1.0, 1.0, 1.0),
+            glm::vec2(1.0, 1.0)
+        ),
+        Vertex::new(
+            glm::vec3(-0.5, -0.5, -0.5),
+            glm::vec3(1.0, 0.0, 0.0),
+            glm::vec2(1.0, 0.0)
+        ),
+        Vertex::new(
+            glm::vec3(0.5, -0.5, -0.5),
+            glm::vec3(0.0, 1.0, 0.0),
+            glm::vec2(0.0, 0.0)
+        ),
+        Vertex::new(
+            glm::vec3(0.5, 0.5, -0.5),
+            glm::vec3(0.0, 0.0, 1.0),
+            glm::vec2(0.0, 1.0)
+        ),
+        Vertex::new(
+            glm::vec3(-0.5, 0.5, -0.5),
             glm::vec3(1.0, 1.0, 1.0),
             glm::vec2(1.0, 1.0)
         ),
@@ -124,7 +144,7 @@ lazy_static! {
 
 // indices for drawing two triangles with vertex data
 // this also needs to be uploaded into an vk::Buffer
-pub const INDICES: &[u16] = &[0, 1, 2, 2, 3, 0];
+pub const INDICES: &[u16] = &[0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4];
 
 // buffers are regions of memory used for storage of arbitraty data and can
 // be read by the graphics card

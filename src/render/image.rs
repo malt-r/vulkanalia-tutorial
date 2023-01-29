@@ -345,3 +345,11 @@ pub unsafe fn create_texture_sampler(device: &Device, data: &mut AppData) -> Res
     data.texture_sampler = device.create_sampler(&info, None)?;
     Ok(())
 }
+
+pub(crate) unsafe fn create_depth_objects(
+    instance: &Instance,
+    device: &Device,
+    data: &mut AppData,
+) -> Result<()> {
+    todo!()
+}
