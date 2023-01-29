@@ -199,6 +199,7 @@ pub unsafe fn create_swapchain_image_views(device: &Device, data: &mut AppData) 
                 *i,
                 data.swapchain_format,
                 components.build(),
+                vk::ImageAspectFlags::COLOR,
             )
         })
         .collect::<Result<Vec<_>, _>>()?;
