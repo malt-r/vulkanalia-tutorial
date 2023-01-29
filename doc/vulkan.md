@@ -321,3 +321,19 @@ not just stored in the cache.
 	the final texel color retrieved by the shader)
 - samplers also take care of transformations, which define, what happens, if reading 
 	texels outside of the image (clamp to edge, repeat, clamp to border, etc.)
+
+## Depth testing 
+
+- without any other modifications, the GPU draws the indices in order referenced in 
+	index buffer -> this may result in incorrect depth sorting (drawing objects, that 
+	are 'further back' on top of pixels, which are 'nearer')
+- two ways to remedy this:
+	- sort drawcalls by depth from back to front (used for transparent objects, because this requires the drawing to occur in order) 
+	- use depth testing with a depth buffer (commonly used for ordering fragments)
+- a depth buffer is an additional attachment that store the depth for every position (just
+	like color attachment stores color for every position)
+- for each fragment, it is checked, if the fragment is closer than the previous one
+	- if not, it is discarded
+	- if yes, the fragment will write its own depth to the depth buffer
+		- it is possible to manipulate this value from the fragment shader, just like 
+		manipulating the color output
