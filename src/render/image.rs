@@ -190,19 +190,39 @@ unsafe fn transition_image_layout(
                 vk::PipelineStageFlags::TRANSFER,
                 vk::PipelineStageFlags::FRAGMENT_SHADER,
             ),
+            (vk::ImageLayout::UNDEFINED, vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL) => (
+                vk::AccessFlags::empty(),
+                vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_READ
+                    | vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
+                vk::PipelineStageFlags::TOP_OF_PIPE,
+                vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS, // depth buffer will be read to perform depth test, which will happen in EARLY_FRAGMENT_TESTS
+            ),
             _ => return Err(anyhow!("Unsupported image layout transition!")),
         };
 
     let command_buffer = command_buffer::begin_single_time_commands(device, data)?;
+
+    // need to select the right aspect mask
+    let aspect_mask = if new_layout == vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL {
+        match format {
+            // combine DEPTH and STENCIL on Formats, which combine DEPTH and STENCIL,
+            // otherwise return DEPTH
+            vk::Format::D32_SFLOAT_S8_UINT | vk::Format::D24_UNORM_S8_UINT => {
+                vk::ImageAspectFlags::DEPTH | vk::ImageAspectFlags::STENCIL
+            }
+            _ => vk::ImageAspectFlags::DEPTH,
+        }
+    } else {
+        vk::ImageAspectFlags::COLOR
+    };
 
     // one of the most common ways to perform layout transitions is using an image
     // memory barrier (that is a pipeline barrier, which is usually used to synchronize
     // access to resources); that can be used to transition image layouts and
     // transfer queue family ownership, when vk::SharingMode::Exclusive is used
     // there is an equivalent buffer memory barrier to do this for buffers
-
     let subresource = vk::ImageSubresourceRange::builder()
-        .aspect_mask(vk::ImageAspectFlags::COLOR)
+        .aspect_mask(aspect_mask)
         .base_mip_level(0)
         .level_count(1)
         .base_array_layer(0)
@@ -389,7 +409,17 @@ pub(crate) unsafe fn create_depth_objects(
         format,
         vk::ImageAspectFlags::DEPTH,
     )?;
-    todo!()
+
+    transition_image_layout(
+        device,
+        data,
+        data.depth_image,
+        format,
+        vk::ImageLayout::UNDEFINED, // we can use the undefined layout as initial layout, because there are no existing depth image contents, that matter
+        vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+    )?;
+
+    Ok(())
 }
 
 unsafe fn get_supported_format(
